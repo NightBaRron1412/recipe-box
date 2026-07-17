@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { waitUntil } from "@vercel/functions";
-import { extractUrl, processShare, processVideo, processPhoto } from "@/lib/pipeline";
+import { extractUrl, processVideo, processPhoto } from "@/lib/pipeline";
 import { sendMessage } from "@/lib/telegram";
+import { enqueueJob, triggerWorker } from "@/lib/queue";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -99,15 +100,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true });
   }
 
-  // 4) Acknowledge fast, then process in the background so Telegram gets a
-  //    quick 200 and we don't hit the webhook timeout.
+  // 4) Enqueue the link and kick the worker. The queue serialises Gemini calls,
+  //    so sending many links at once never trips the rate limit.
   await sendMessage(chatId, "⏳ جاري حفظ الوصفة...");
-  waitUntil(
-    processShare(url, chatId).catch(async (e) => {
-      console.error("processShare failed", e);
-      await sendMessage(chatId, "⚠️ حدث خطأ غير متوقع أثناء الحفظ.");
-    })
-  );
+  await enqueueJob(url, chatId);
+  waitUntil(triggerWorker());
 
   return NextResponse.json({ ok: true });
 }

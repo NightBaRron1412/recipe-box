@@ -376,16 +376,8 @@ export async function saveFromUrl(url: string): Promise<SaveResult> {
   return { id, status, title, viaVideo, updated: Boolean(existing), duplicate: false };
 }
 
-/** Telegram entry point: save a shared link and reply in Arabic. */
-export async function processShare(url: string, chatId: number): Promise<void> {
-  let r: SaveResult;
-  try {
-    r = await saveFromUrl(url);
-  } catch {
-    await sendMessage(chatId, "⚠️ حدث خطأ أثناء حفظ الوصفة في قاعدة البيانات.");
-    return;
-  }
-
+/** Send the appropriate Arabic reply for a save result. */
+export async function sendSaveResult(chatId: number, r: SaveResult): Promise<void> {
   const base = (process.env.APP_BASE_URL || "").replace(/\/$/, "");
   const link = base ? `\n${base}/recipe/${r.id}` : "";
 
