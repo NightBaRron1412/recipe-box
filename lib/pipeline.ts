@@ -4,6 +4,7 @@ import {
   extractRecipe,
   extractRecipeFromVideo,
   extractRecipeFromYouTube,
+  extractRecipeFromImage,
 } from "./gemini";
 import type { ExtractedRecipe } from "./types";
 import {
@@ -357,6 +358,85 @@ export async function processShare(url: string, chatId: number): Promise<void> {
     await sendMessage(
       chatId,
       `⚠️ لم أستطع جلب محتوى الرابط (قد يكون خاصًا). حفظت الرابط فقط.${link}`
+    );
+  }
+}
+
+/**
+ * Core: extract a recipe from an image buffer (screenshot / handwritten /
+ * cookbook page) and save it. Shared by Telegram photos and the web uploader.
+ */
+export async function saveFromImage(
+  buf: Buffer,
+  mimeType: string,
+  opts?: { caption?: string }
+): Promise<SaveResult> {
+  const sb = supabaseAdmin();
+  const id = randomUUID();
+
+  const [extracted, image_url] = await Promise.all([
+    extractRecipeFromImage(buf, mimeType, opts?.caption),
+    uploadImageBuffer(sb, id, buf, mimeType),
+  ]);
+
+  const ingredients = extracted?.ingredients ?? [];
+  const steps = extracted?.steps ?? [];
+  const title = (extracted?.is_recipe && extracted.title) || "وصفة من صورة";
+  const captionUrl = opts?.caption ? extractUrl(opts.caption) : null;
+  const status: SaveResult["status"] =
+    !extracted?.is_recipe || (ingredients.length === 0 && steps.length === 0)
+      ? "needs_review"
+      : "ok";
+
+  const { error } = await sb.from("recipes").insert({
+    id,
+    source_url: captionUrl || "photo-upload",
+    platform: captionUrl ? detectPlatform(captionUrl) : "photo",
+    author: null,
+    title,
+    caption: opts?.caption ?? null,
+    image_url,
+    ingredients,
+    steps,
+    tags: extracted?.tags ?? [],
+    servings: extracted?.servings ?? null,
+    time_minutes: extracted?.time_minutes ?? null,
+    status,
+    raw: { via: "photo" },
+    lang: "ar",
+  });
+  if (error) throw new Error(error.message);
+
+  return { id, status, title, viaVideo: false, updated: false, duplicate: false };
+}
+
+/** Telegram entry point for a photo/screenshot sent to the bot. */
+export async function processPhoto(opts: {
+  fileId: string;
+  chatId: number;
+  caption?: string;
+}): Promise<void> {
+  const { path } = await getFilePath(opts.fileId);
+  if (!path) {
+    await sendMessage(opts.chatId, "⚠️ تعذّر الوصول إلى الصورة.");
+    return;
+  }
+  const buf = await downloadFile(path);
+  let r: SaveResult;
+  try {
+    r = await saveFromImage(buf, "image/jpeg", { caption: opts.caption });
+  } catch {
+    await sendMessage(opts.chatId, "⚠️ حدث خطأ أثناء قراءة الصورة.");
+    return;
+  }
+  const base = (process.env.APP_BASE_URL || "").replace(/\/$/, "");
+  const link = base ? `\n${base}/recipe/${r.id}` : "";
+  if (r.status === "ok") {
+    await sendMessage(opts.chatId, `✅ استخرجت الوصفة من الصورة: <b>${escapeHtml(r.title)}</b>${link}`);
+  } else {
+    await sendMessage(
+      opts.chatId,
+      `⚠️ حفظت الصورة لكن لم أتمكن من قراءة وصفة واضحة منها.${link}`
     );
   }
 }

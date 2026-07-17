@@ -1,11 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import type { Recipe } from "@/lib/types";
 import { UnlockButton } from "./Unlock";
 import { CartLink } from "./CartLink";
 import { ThemeToggle } from "./ThemeToggle";
+import { getEditKey, hasEditKey } from "@/lib/client";
 
 const PLATFORM_LABEL: Record<string, string> = {
   instagram: "انستغرام",
@@ -30,17 +32,30 @@ export default function GalleryClient({
   recipes,
   initialQuery = "",
   initialTag = "",
+  initialCollection = "",
 }: {
   recipes: Recipe[];
   initialQuery?: string;
   initialTag?: string;
+  initialCollection?: string;
 }) {
+  const router = useRouter();
   const [q, setQ] = useState(initialQuery);
   const [tags, setTags] = useState<string[]>(initialTag ? [initialTag] : []);
   const [platform, setPlatform] = useState("");
   const [status, setStatus] = useState("");
+  const [collection, setCollection] = useState(initialCollection);
+  const [onlyFav, setOnlyFav] = useState(false);
   const [sort, setSort] = useState<Sort>("newest");
   const [showAllTags, setShowAllTags] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const photoRef = useRef<HTMLInputElement>(null);
+
+  const collections = useMemo(() => {
+    const s = new Set<string>();
+    for (const r of recipes) for (const c of r.collections || []) s.add(c);
+    return [...s].sort((a, b) => a.localeCompare(b, "ar"));
+  }, [recipes]);
 
   const allTags = useMemo(() => {
     const count = new Map<string, number>();
@@ -57,6 +72,8 @@ export default function GalleryClient({
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
     let list = recipes.filter((r) => {
+      if (onlyFav && !r.favorite) return false;
+      if (collection && !(r.collections || []).includes(collection)) return false;
       if (platform && r.platform !== platform) return false;
       if (status && r.status !== status) return false;
       if (tags.length && !tags.every((t) => (r.tags || []).includes(t))) return false;
@@ -89,18 +106,52 @@ export default function GalleryClient({
       return b.created_at.localeCompare(a.created_at); // newest
     });
     return list;
-  }, [recipes, q, tags, platform, status, sort]);
+  }, [recipes, q, tags, platform, status, sort, onlyFav, collection]);
 
   const toggleTag = (t: string) =>
     setTags((cur) => (cur.includes(t) ? cur.filter((x) => x !== t) : [...cur, t]));
 
   const activeFilters =
-    tags.length + (platform ? 1 : 0) + (status ? 1 : 0) + (q.trim() ? 1 : 0);
+    tags.length +
+    (platform ? 1 : 0) +
+    (status ? 1 : 0) +
+    (q.trim() ? 1 : 0) +
+    (onlyFav ? 1 : 0) +
+    (collection ? 1 : 0);
   const clearAll = () => {
     setQ("");
     setTags([]);
     setPlatform("");
     setStatus("");
+    setCollection("");
+    setOnlyFav(false);
+  };
+
+  const surprise = () => {
+    const pool = filtered.length ? filtered : recipes;
+    if (!pool.length) return;
+    const i = Math.floor((Date.now() / 7) % pool.length);
+    router.push(`/recipe/${pool[i].id}`);
+  };
+
+  const onPhoto = async (file: File) => {
+    if (!hasEditKey()) {
+      alert("فعّل وضع التحرير أولًا (زر القفل).");
+      return;
+    }
+    setUploading(true);
+    const fd = new FormData();
+    fd.append("file", file);
+    const res = await fetch("/api/photo-save", {
+      method: "POST",
+      headers: { "x-edit-key": getEditKey() },
+      body: fd,
+    });
+    setUploading(false);
+    if (res.ok) {
+      const r = await res.json();
+      router.push(`/recipe/${r.id}`);
+    } else alert("تعذّرت قراءة الصورة.");
   };
 
   const reviewCount = recipes.filter((r) => r.status === "needs_review").length;
@@ -117,10 +168,32 @@ export default function GalleryClient({
           </div>
         </div>
         <div className="header-actions">
+          <button className="icon-btn" onClick={surprise} title="فاجئني بوصفة">
+            🎲
+          </button>
+          <button
+            className="icon-btn"
+            onClick={() => photoRef.current?.click()}
+            title="أضف وصفة من صورة"
+            disabled={uploading}
+          >
+            {uploading ? "…" : "📷"}
+          </button>
           <ThemeToggle />
           <CartLink />
           <UnlockButton />
         </div>
+        <input
+          ref={photoRef}
+          type="file"
+          accept="image/*"
+          hidden
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) onPhoto(f);
+            e.target.value = "";
+          }}
+        />
       </header>
 
       <div className="toolbar">
@@ -141,6 +214,24 @@ export default function GalleryClient({
         </div>
 
         <div className="filters-row">
+          <button
+            className={`fav-filter ${onlyFav ? "active" : ""}`}
+            onClick={() => setOnlyFav((f) => !f)}
+          >
+            {onlyFav ? "❤️" : "🤍"} المفضلة
+          </button>
+
+          {collections.length > 0 && (
+            <select value={collection} onChange={(e) => setCollection(e.target.value)}>
+              <option value="">كل المجموعات</option>
+              {collections.map((c) => (
+                <option key={c} value={c}>
+                  📁 {c}
+                </option>
+              ))}
+            </select>
+          )}
+
           <select value={sort} onChange={(e) => setSort(e.target.value as Sort)}>
             <option value="newest">الأحدث</option>
             <option value="oldest">الأقدم</option>
@@ -239,6 +330,7 @@ export default function GalleryClient({
                 {r.status === "needs_review" && (
                   <span className="review-badge">بحاجة لمراجعة</span>
                 )}
+                {r.favorite && <span className="fav-badge">❤️</span>}
               </div>
               <div className="card-body">
                 <h3 className="card-title">{r.title || "وصفة بدون عنوان"}</h3>

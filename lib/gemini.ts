@@ -147,6 +147,25 @@ export async function extractRecipeFromVideo(
   return callGemini([{ text: promptText }, { fileData: { mimeType, fileUri: uri } }]);
 }
 
+const IMAGE_PROMPT = `هذه صورة تحتوي على وصفة طبخ (لقطة شاشة، أو صفحة كتاب، أو وصفة مكتوبة بخط اليد).
+اقرأ كل النص في الصورة بعناية واستخرج الوصفة كاملة، وأعِد النتيجة بصيغة JSON فقط،
+وكل النصوص بالعربية الفصحى (ترجم إن لزم).
+
+${SCHEMA_HINT}`;
+
+/** Extract a recipe from an image (screenshot / handwritten / cookbook page). */
+export async function extractRecipeFromImage(
+  buf: Buffer,
+  mimeType: string,
+  extra?: string
+): Promise<ExtractedRecipe | null> {
+  const promptText = IMAGE_PROMPT + (extra ? `\n\nنص مرفق:\n${extra}` : "");
+  return callGemini([
+    { text: promptText },
+    { inlineData: { mimeType, data: buf.toString("base64") } },
+  ]);
+}
+
 /** Extract a recipe from a YouTube URL — Gemini ingests YouTube natively. */
 export async function extractRecipeFromYouTube(
   url: string,

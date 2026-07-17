@@ -14,5 +14,18 @@ export default async function RecipePage({
   const sb = supabasePublic();
   const { data } = await sb.from("recipes").select("*").eq("id", id).single();
   if (!data) notFound();
-  return <RecipeView recipe={data as Recipe} />;
+  const recipe = data as Recipe;
+
+  let related: Recipe[] = [];
+  if (recipe.tags?.length) {
+    const { data: rel } = await sb
+      .from("recipes")
+      .select("*")
+      .overlaps("tags", recipe.tags)
+      .neq("id", id)
+      .limit(6);
+    related = (rel as Recipe[]) || [];
+  }
+
+  return <RecipeView recipe={recipe} related={related} />;
 }

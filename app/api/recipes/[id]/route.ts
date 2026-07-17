@@ -19,6 +19,8 @@ const EDITABLE = new Set([
   "tags",
   "status",
   "image_url",
+  "favorite",
+  "collections",
 ]);
 
 export async function PATCH(
@@ -40,7 +42,14 @@ export async function PATCH(
     if (k === "time_minutes") {
       const n = Number(v);
       update[k] = Number.isFinite(n) && n > 0 ? Math.round(n) : null;
-    } else if (k === "ingredients" || k === "steps" || k === "tags") {
+    } else if (k === "favorite") {
+      update[k] = Boolean(v);
+    } else if (
+      k === "ingredients" ||
+      k === "steps" ||
+      k === "tags" ||
+      k === "collections"
+    ) {
       update[k] = Array.isArray(v)
         ? v.map((x) => String(x).trim()).filter(Boolean)
         : [];

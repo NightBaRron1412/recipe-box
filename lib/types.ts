@@ -16,6 +16,8 @@ export interface Recipe {
   time_minutes: number | null;
   status: RecipeStatus;
   lang: string | null;
+  favorite: boolean;
+  collections: string[];
 }
 
 export interface ExtractedRecipe {

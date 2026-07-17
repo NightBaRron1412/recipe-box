@@ -14,6 +14,7 @@ import {
 import { UnlockButton } from "@/app/Unlock";
 import { CartLink } from "@/app/CartLink";
 import { ThemeToggle } from "@/app/ThemeToggle";
+import { scaleIngredient, SCALE_OPTIONS } from "@/lib/scale";
 
 const PLATFORM_LABEL: Record<string, string> = {
   instagram: "انستغرام",
@@ -24,7 +25,13 @@ const PLATFORM_LABEL: Record<string, string> = {
   other: "المصدر",
 };
 
-export default function RecipeView({ recipe }: { recipe: Recipe }) {
+export default function RecipeView({
+  recipe,
+  related = [],
+}: {
+  recipe: Recipe;
+  related?: Recipe[];
+}) {
   const router = useRouter();
   const [r, setR] = useState<Recipe>(recipe);
   const [editing, setEditing] = useState(false);
@@ -33,12 +40,35 @@ export default function RecipeView({ recipe }: { recipe: Recipe }) {
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
   const [added, setAdded] = useState(false);
+  const [scale, setScale] = useState(1);
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     setCanEdit(hasEditKey());
     setCheckedState(getChecked(recipe.id));
   }, [recipe.id]);
+
+  // Keep the screen awake while viewing a recipe (handy while cooking).
+  useEffect(() => {
+    let lock: { release: () => void } | null = null;
+    const nav = navigator as Navigator & { wakeLock?: { request: (t: string) => Promise<{ release: () => void }> } };
+    nav.wakeLock?.request("screen").then((l) => (lock = l)).catch(() => {});
+    return () => lock?.release?.();
+  }, []);
+
+  const toggleFavorite = async () => {
+    if (!hasEditKey()) {
+      alert("فعّل وضع التحرير أولًا (زر القفل) لتتمكن من الحفظ في المفضلة.");
+      return;
+    }
+    const next = !r.favorite;
+    setR((c) => ({ ...c, favorite: next }));
+    await fetch(`/api/recipes/${r.id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json", "x-edit-key": getEditKey() },
+      body: JSON.stringify({ favorite: next }),
+    }).catch(() => setR((c) => ({ ...c, favorite: !next })));
+  };
 
   const toggleCheck = (i: number) => {
     const next = checked.includes(i)
@@ -76,6 +106,13 @@ export default function RecipeView({ recipe }: { recipe: Recipe }) {
           ← كل الوصفات
         </Link>
         <div className="topbar-actions">
+          <button
+            className={`fav-btn ${r.favorite ? "on" : ""}`}
+            onClick={toggleFavorite}
+            title="المفضلة"
+          >
+            {r.favorite ? "❤️" : "🤍"}
+          </button>
           {canEdit && !editing && (
             <button className="btn-ghost" onClick={() => setEditing(true)}>
               ✏️ تعديل
@@ -143,6 +180,15 @@ export default function RecipeView({ recipe }: { recipe: Recipe }) {
                 #{t}
               </Link>
             ))}
+            {(r.collections || []).map((c) => (
+              <Link
+                className="chip collection"
+                key={c}
+                href={`/?collection=${encodeURIComponent(c)}`}
+              >
+                📁 {c}
+              </Link>
+            ))}
           </div>
 
           <div className="recipe-actions no-print">
@@ -150,7 +196,11 @@ export default function RecipeView({ recipe }: { recipe: Recipe }) {
               <button
                 className="btn-ghost"
                 onClick={() => {
-                  addToShopping(r.id, r.title || "وصفة", ingredients);
+                  addToShopping(
+                    r.id,
+                    r.title || "وصفة",
+                    ingredients.map((i) => scaleIngredient(i, scale))
+                  );
                   setAdded(true);
                   setTimeout(() => setAdded(false), 1500);
                 }}
@@ -209,6 +259,18 @@ export default function RecipeView({ recipe }: { recipe: Recipe }) {
                   {checked.length}/{ingredients.length}
                 </span>
               </div>
+              <div className="scaler no-print">
+                <span className="scaler-label">الكمية:</span>
+                {SCALE_OPTIONS.map((o) => (
+                  <button
+                    key={o.value}
+                    className={`scale-btn ${scale === o.value ? "active" : ""}`}
+                    onClick={() => setScale(o.value)}
+                  >
+                    {o.label}
+                  </button>
+                ))}
+              </div>
               <ul className="ingredients">
                 {ingredients.map((ing, i) => (
                   <li
@@ -217,7 +279,7 @@ export default function RecipeView({ recipe }: { recipe: Recipe }) {
                     onClick={() => toggleCheck(i)}
                   >
                     <span className="tick">{checked.includes(i) ? "✓" : ""}</span>
-                    {ing}
+                    {scaleIngredient(ing, scale)}
                   </li>
                 ))}
               </ul>
@@ -239,6 +301,25 @@ export default function RecipeView({ recipe }: { recipe: Recipe }) {
             <div className="section">
               <h2>📝 النص الأصلي</h2>
               <div className="caption-raw">{r.caption}</div>
+            </div>
+          )}
+
+          {related.length > 0 && (
+            <div className="section no-print">
+              <h2>🍴 وصفات مشابهة</h2>
+              <div className="related-grid">
+                {related.map((rec) => (
+                  <Link href={`/recipe/${rec.id}`} key={rec.id} className="related-card">
+                    {rec.image_url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={rec.image_url} alt={rec.title || ""} loading="lazy" />
+                    ) : (
+                      <div className="related-ph">🍲</div>
+                    )}
+                    <span>{rec.title || "وصفة"}</span>
+                  </Link>
+                ))}
+              </div>
             </div>
           )}
         </>
@@ -292,6 +373,7 @@ function EditForm({
   const [servings, setServings] = useState(r.servings || "");
   const [time, setTime] = useState(r.time_minutes ? String(r.time_minutes) : "");
   const [tags, setTags] = useState((r.tags || []).join("، "));
+  const [collections, setCollections] = useState((r.collections || []).join("، "));
   const [ingredients, setIngredients] = useState((r.ingredients || []).join("\n"));
   const [steps, setSteps] = useState((r.steps || []).join("\n"));
 
@@ -302,6 +384,7 @@ function EditForm({
       servings,
       time_minutes: time ? Number(time) : null,
       tags: tags.split(/[،,\n]/).map((s) => s.trim()).filter(Boolean),
+      collections: collections.split(/[،,\n]/).map((s) => s.trim()).filter(Boolean),
       ingredients: ingredients.split("\n").map((s) => s.trim()).filter(Boolean),
       steps: steps.split("\n").map((s) => s.trim()).filter(Boolean),
       status: "ok",
@@ -345,6 +428,9 @@ function EditForm({
 
       <label>الوسوم (افصل بفاصلة)</label>
       <input value={tags} onChange={(e) => setTags(e.target.value)} />
+
+      <label>المجموعات (عشاء، حلويات، رمضان...)</label>
+      <input value={collections} onChange={(e) => setCollections(e.target.value)} />
 
       <label>المكونات (سطر لكل مكوّن)</label>
       <textarea

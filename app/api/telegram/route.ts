@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { waitUntil } from "@vercel/functions";
-import { extractUrl, processShare, processVideo } from "@/lib/pipeline";
+import { extractUrl, processShare, processVideo, processPhoto } from "@/lib/pipeline";
 import { sendMessage } from "@/lib/telegram";
 
 export const runtime = "nodejs";
@@ -41,7 +41,23 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true });
   }
 
-  // 4) Video sent directly (reel whose recipe is only spoken) -> transcribe.
+  // 4a) Photo / screenshot sent -> OCR the recipe.
+  const photo = Array.isArray(msg?.photo) && msg.photo.length ? msg.photo[msg.photo.length - 1] : null;
+  const photoDoc =
+    msg?.document && /^image\//.test(msg.document.mime_type || "") ? msg.document : null;
+  const img = photo || photoDoc;
+  if (img?.file_id) {
+    await sendMessage(chatId, "⏳ جاري قراءة الوصفة من الصورة...");
+    waitUntil(
+      processPhoto({ fileId: img.file_id, chatId, caption: msg?.caption }).catch(async (e) => {
+        console.error("processPhoto failed", e);
+        await sendMessage(chatId, "⚠️ حدث خطأ أثناء قراءة الصورة.");
+      })
+    );
+    return NextResponse.json({ ok: true });
+  }
+
+  // 4b) Video sent directly (reel whose recipe is only spoken) -> transcribe.
   const video =
     msg?.video ||
     (msg?.document && /^video\//.test(msg.document.mime_type || "")
