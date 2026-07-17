@@ -1149,6 +1149,24 @@ html[data-theme="dark"] .skeleton {
   .toast { font-size: 13px; }
 }
 
+/* ---------- 404 ---------- */
+.notfound {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  text-align: center;
+  padding: 80px 20px;
+}
+.notfound h1 {
+  font-size: 26px;
+  margin: 8px 0 0;
+}
+.notfound p {
+  color: var(--muted);
+  margin: 0 0 12px;
+}
+
 /* ---------- Print ---------- */
 @media print {
   .no-print,

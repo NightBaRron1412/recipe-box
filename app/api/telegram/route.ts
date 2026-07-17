@@ -92,7 +92,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true });
   }
 
-  const urls = extractUrls(text);
+  // Desktop shares put the URL in a `text_link` entity, not the visible text —
+  // collect from both plain text and link entities.
+  const entities = (msg?.entities || msg?.caption_entities || []) as Array<{
+    type: string;
+    url?: string;
+  }>;
+  const entityUrls = entities
+    .filter((e) => e.type === "text_link" && e.url)
+    .map((e) => (e.url as string).replace(/[)\].,]+$/, ""));
+  const urls = [...new Set([...extractUrls(text), ...entityUrls])];
   if (!urls.length) {
     // No link → treat the message as a search query over saved recipes.
     const base = (process.env.APP_BASE_URL || "").replace(/\/$/, "");
