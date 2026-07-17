@@ -45,7 +45,36 @@ export default function GalleryClient({
   const [showAllTags, setShowAllTags] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [canEdit, setCanEdit] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
+  const [addUrl, setAddUrl] = useState("");
+  const [adding, setAdding] = useState(false);
   const photoRef = useRef<HTMLInputElement>(null);
+
+  const addByLink = async () => {
+    const url = addUrl.trim();
+    if (!url) return;
+    if (!hasEditKey()) {
+      toast("فعّل وضع التحرير أولًا (زر القفل).", "error");
+      return;
+    }
+    setAdding(true);
+    toast("جاري حفظ الوصفة...");
+    try {
+      const res = await fetch("/api/web-save", {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-edit-key": getEditKey() },
+        body: JSON.stringify({ url }),
+      });
+      if (res.ok) {
+        const r = await res.json();
+        setAddUrl("");
+        setAddOpen(false);
+        router.push(`/recipe/${r.id}`);
+      } else toast("تعذّر حفظ الرابط.", "error");
+    } finally {
+      setAdding(false);
+    }
+  };
 
   useEffect(() => setCanEdit(hasEditKey()), []);
 
@@ -192,6 +221,14 @@ export default function GalleryClient({
           </div>
         </div>
         <div className="header-actions">
+          <button
+            className={`icon-btn ${addOpen ? "on" : ""}`}
+            onClick={() => setAddOpen((o) => !o)}
+            title="أضف وصفة برابط"
+            aria-label="أضف برابط"
+          >
+            <Icon name="plus" />
+          </button>
           <button className="icon-btn" onClick={surprise} title="فاجئني بوصفة" aria-label="وصفة عشوائية">
             <Icon name="dice" />
           </button>
@@ -220,6 +257,23 @@ export default function GalleryClient({
           }}
         />
       </header>
+
+      {addOpen && (
+        <div className="add-bar">
+          <span className="add-icon"><Icon name="link" size={18} /></span>
+          <input
+            type="url"
+            value={addUrl}
+            onChange={(e) => setAddUrl(e.target.value)}
+            placeholder="ألصق رابط وصفة (انستغرام / فيسبوك / يوتيوب / تيك توك)..."
+            autoFocus
+            onKeyDown={(e) => e.key === "Enter" && addByLink()}
+          />
+          <button className="btn-primary" onClick={addByLink} disabled={adding}>
+            {adding ? "..." : "حفظ"}
+          </button>
+        </div>
+      )}
 
       <div className="toolbar">
         <div className="search">

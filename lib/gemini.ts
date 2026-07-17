@@ -10,7 +10,10 @@ const SCHEMA_HINT = `الحقول المطلوبة:
 {
   "is_recipe": boolean,        // هل يوجد فعلاً وصفة طبخ واضحة؟
   "title": string,             // اسم الوصفة بالعربية
-  "ingredients": string[],     // المكونات، كل مكوّن في سطر مع الكميات إن وُجدت
+  "ingredients": string[],     // كل المكونات كقائمة مسطحة (الكميات بالأرقام)
+  "ingredient_sections": [     // نفس المكونات مقسّمة حسب أجزاء الوصفة (للعجينة/للصوص...) إن كانت متعددة الأجزاء، وإلا مجموعة واحدة بعنوان ""
+    { "title": string, "items": string[] }
+  ],
   "steps": string[],           // خطوات التحضير مرتبة
   "tags": string[],            // وسوم قصيرة بالعربية مثل: حلويات، سريع، دجاج، نباتي
   "servings": string | null,   // عدد الحصص إن ذُكر
@@ -53,6 +56,17 @@ const RESPONSE_SCHEMA = {
     is_recipe: { type: "boolean" },
     title: { type: "string" },
     ingredients: { type: "array", items: { type: "string" } },
+    ingredient_sections: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          title: { type: "string" },
+          items: { type: "array", items: { type: "string" } },
+        },
+        required: ["title", "items"],
+      },
+    },
     steps: { type: "array", items: { type: "string" } },
     tags: { type: "array", items: { type: "string" } },
     servings: { type: "string", nullable: true },
@@ -336,6 +350,11 @@ function normalize(p: any): ExtractedRecipe {
     is_recipe: Boolean(p?.is_recipe),
     title: (p?.title ? String(p.title) : "").trim(),
     ingredients: arr(p?.ingredients),
+    ingredient_sections: Array.isArray(p?.ingredient_sections)
+      ? p.ingredient_sections
+          .map((s: any) => ({ title: String(s?.title || "").trim(), items: arr(s?.items) }))
+          .filter((s: any) => s.items.length)
+      : [],
     steps: arr(p?.steps),
     tags: arr(p?.tags),
     servings: p?.servings ? String(p.servings) : null,

@@ -1,5 +1,10 @@
 export type RecipeStatus = "ok" | "needs_review" | "fetch_failed";
 
+export interface IngredientSection {
+  title: string;
+  items: string[];
+}
+
 export interface Nutrition {
   calories: number | null;
   protein_g: number | null;
@@ -29,12 +34,14 @@ export interface Recipe {
   notes: string | null;
   rating: number | null;
   cooked: boolean;
+  ingredient_sections: IngredientSection[] | null;
 }
 
 export interface ExtractedRecipe {
   is_recipe: boolean;
   title: string;
   ingredients: string[];
+  ingredient_sections: IngredientSection[];
   steps: string[];
   tags: string[];
   servings: string | null;

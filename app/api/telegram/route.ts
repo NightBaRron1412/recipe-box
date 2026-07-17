@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { waitUntil } from "@vercel/functions";
-import { extractUrl, extractUrls, processVideo, processPhoto } from "@/lib/pipeline";
-import { sendMessage } from "@/lib/telegram";
+import { extractUrls, processVideo, processPhoto, searchRecipes } from "@/lib/pipeline";
+import { sendMessage, escapeHtml } from "@/lib/telegram";
 import { enqueueJob, triggerWorker } from "@/lib/queue";
 
 export const runtime = "nodejs";
@@ -93,10 +93,20 @@ export async function POST(req: NextRequest) {
 
   const urls = extractUrls(text);
   if (!urls.length) {
-    await sendMessage(
-      chatId,
-      "من فضلك أرسل رابط وصفة (انستغرام / فيسبوك / تيك توك)."
-    );
+    // No link → treat the message as a search query over saved recipes.
+    const base = (process.env.APP_BASE_URL || "").replace(/\/$/, "");
+    const results = await searchRecipes(text);
+    if (!results.length) {
+      await sendMessage(
+        chatId,
+        "لم أجد وصفات مطابقة. جرّب كلمة أخرى، أو أرسل رابط/صورة وصفة لحفظها."
+      );
+      return NextResponse.json({ ok: true });
+    }
+    const lines = results
+      .map((r) => `• <b>${escapeHtml(r.title)}</b>\n${base}/recipe/${r.id}`)
+      .join("\n\n");
+    await sendMessage(chatId, `🔎 نتائج البحث:\n\n${lines}`);
     return NextResponse.json({ ok: true });
   }
 

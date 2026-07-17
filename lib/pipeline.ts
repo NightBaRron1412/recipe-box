@@ -6,8 +6,49 @@ import {
   extractRecipeFromYouTube,
   extractRecipeFromImage,
 } from "./gemini";
-import type { ExtractedRecipe } from "./types";
+import type { ExtractedRecipe, IngredientSection } from "./types";
 import { normalizeQuantity } from "./scale";
+import { arabicNormalize } from "./arabic";
+
+/** Search saved recipes by free text (Arabic-normalized token match). */
+export async function searchRecipes(
+  query: string,
+  limit = 6
+): Promise<{ id: string; title: string }[]> {
+  const tokens = arabicNormalize(query).split(/\s+/).filter((w) => w.length >= 2);
+  if (!tokens.length) return [];
+  const sb = supabaseAdmin();
+  const { data } = await sb.from("recipes").select("id,title,tags,ingredients").limit(500);
+  return (data || [])
+    .map((r) => {
+      const hay = arabicNormalize(
+        [r.title, ...(r.tags || []), ...(r.ingredients || [])].filter(Boolean).join(" ")
+      );
+      let score = 0;
+      for (const t of tokens) if (hay.includes(t)) score++;
+      return { r, score };
+    })
+    .filter((x) => x.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit)
+    .map((x) => ({ id: x.r.id as string, title: (x.r.title as string) || "وصفة" }));
+}
+
+/** Derive a normalized flat ingredient list + (titled) sections from an extract. */
+function buildIngredients(extracted: ExtractedRecipe | null): {
+  ingredients: string[];
+  sections: IngredientSection[];
+} {
+  const raw = (extracted?.ingredient_sections ?? [])
+    .map((s) => ({ title: (s.title || "").trim(), items: (s.items || []).map(normalizeQuantity) }))
+    .filter((s) => s.items.length);
+  const ingredients = raw.length
+    ? raw.flatMap((s) => s.items)
+    : (extracted?.ingredients ?? []).map(normalizeQuantity);
+  // Only keep sections if there's real grouping (at least one titled section).
+  const sections = raw.some((s) => s.title) ? raw : [];
+  return { ingredients, sections };
+}
 import {
   sendMessage,
   escapeHtml,
@@ -363,7 +404,7 @@ export async function saveFromUrl(url: string): Promise<SaveResult> {
     }
   }
 
-  const ingredients = (extracted?.ingredients ?? []).map(normalizeQuantity);
+  const { ingredients, sections } = buildIngredients(extracted);
   const steps = extracted?.steps ?? [];
   const title =
     (extracted?.is_recipe && extracted.title) || shortenTitle(meta.title) || "وصفة بدون عنوان";
@@ -381,6 +422,7 @@ export async function saveFromUrl(url: string): Promise<SaveResult> {
     caption: meta.caption ?? null,
     image_url,
     ingredients,
+    ingredient_sections: sections.length ? sections : null,
     steps,
     tags: extracted?.tags ?? [],
     servings: extracted?.servings ?? null,
@@ -447,7 +489,7 @@ export async function saveFromImage(
     uploadImageBuffer(sb, id, buf, mimeType),
   ]);
 
-  const ingredients = (extracted?.ingredients ?? []).map(normalizeQuantity);
+  const { ingredients, sections } = buildIngredients(extracted);
   const steps = extracted?.steps ?? [];
   const title = (extracted?.is_recipe && extracted.title) || "وصفة من صورة";
   const captionUrl = opts?.caption ? extractUrl(opts.caption) : null;
@@ -465,6 +507,7 @@ export async function saveFromImage(
     caption: opts?.caption ?? null,
     image_url,
     ingredients,
+    ingredient_sections: sections.length ? sections : null,
     steps,
     tags: extracted?.tags ?? [],
     servings: extracted?.servings ?? null,
@@ -555,7 +598,7 @@ export async function processVideo(opts: {
     })(),
   ]);
 
-  const ingredients = (extracted?.ingredients ?? []).map(normalizeQuantity);
+  const { ingredients, sections } = buildIngredients(extracted);
   const steps = extracted?.steps ?? [];
   const title = (extracted?.is_recipe && extracted.title) || "وصفة من فيديو";
   const captionUrl = opts.caption ? extractUrl(opts.caption) : null;
@@ -574,6 +617,7 @@ export async function processVideo(opts: {
     caption: opts.caption ?? null,
     image_url,
     ingredients,
+    ingredient_sections: sections.length ? sections : null,
     steps,
     tags: extracted?.tags ?? [],
     servings: extracted?.servings ?? null,

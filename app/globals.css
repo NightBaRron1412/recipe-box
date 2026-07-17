@@ -1024,6 +1024,42 @@ html[data-theme="dark"] .chip.star {
   color: #e6c96a;
 }
 
+/* ---------- Add-by-link bar ---------- */
+.add-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+  background: var(--card);
+  border: 1px solid var(--accent);
+  border-radius: 14px;
+  padding: 8px 14px;
+  box-shadow: var(--shadow);
+}
+.add-bar .add-icon {
+  color: var(--muted);
+  display: flex;
+}
+.add-bar input {
+  flex: 1;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 15px;
+  padding: 6px;
+}
+
+/* ---------- Ingredient sections ---------- */
+.ing-section {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--accent-dark);
+  margin: 16px 0 4px;
+}
+.ing-group:first-child .ing-section {
+  margin-top: 4px;
+}
+
 /* ---------- Toasts ---------- */
 .toast-host {
   position: fixed;

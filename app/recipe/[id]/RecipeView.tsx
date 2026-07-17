@@ -334,18 +334,45 @@ export default function RecipeView({
                   </button>
                 ))}
               </div>
-              <ul className="ingredients">
-                {ingredients.map((ing, i) => (
-                  <li
-                    key={i}
-                    className={checked.includes(i) ? "done" : ""}
-                    onClick={() => toggleCheck(i)}
-                  >
-                    <span className="tick">{checked.includes(i) ? "✓" : ""}</span>
-                    {scaleIngredient(ing, scale)}
-                  </li>
-                ))}
-              </ul>
+              {r.ingredient_sections && r.ingredient_sections.length ? (
+                (() => {
+                  let gi = -1;
+                  return r.ingredient_sections.map((sec, si) => (
+                    <div key={si} className="ing-group">
+                      {sec.title && <h3 className="ing-section">{sec.title}</h3>}
+                      <ul className="ingredients">
+                        {sec.items.map((ing) => {
+                          gi++;
+                          const idx = gi;
+                          return (
+                            <li
+                              key={idx}
+                              className={checked.includes(idx) ? "done" : ""}
+                              onClick={() => toggleCheck(idx)}
+                            >
+                              <span className="tick">{checked.includes(idx) ? "✓" : ""}</span>
+                              {scaleIngredient(ing, scale)}
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </div>
+                  ));
+                })()
+              ) : (
+                <ul className="ingredients">
+                  {ingredients.map((ing, i) => (
+                    <li
+                      key={i}
+                      className={checked.includes(i) ? "done" : ""}
+                      onClick={() => toggleCheck(i)}
+                    >
+                      <span className="tick">{checked.includes(i) ? "✓" : ""}</span>
+                      {scaleIngredient(ing, scale)}
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           )}
 
