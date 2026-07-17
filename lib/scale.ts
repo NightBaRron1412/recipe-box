@@ -34,6 +34,11 @@ const DUALS: [RegExp, string][] = [
   [/^كيلوين\s+/, "كيلو"], [/^لترين\s+/, "لتر"],
 ];
 
+// A leading measurement/countable unit with no number implies a quantity of 1
+// ("كوب من السكر" = 1 cup). Scaling then works ("2 كوب من السكر").
+const UNIT =
+  /^(?:كوب|كوباية|كوبايه|كأس|كاسة|كاسه|ملعقة|ملعقه|ملعقتان|حبة|حبه|فص|فصوص|علبة|علبه|ثمرة|ثمره|رأس|راس|شريحة|شريحه|قطعة|قطعه|كيلو|كيلوغرام|كيلوجرام|غرام|جرام|لتر|رشة|رشه|حزمة|حزمه|ظرف|علبتان)\s+/;
+
 function toLatin(s: string): string {
   return s.replace(/[٠-٩٫]/g, (d) => AR_DIGITS[d] || d);
 }
@@ -65,6 +70,7 @@ export function normalizeQuantity(text: string): string {
     const w = s.match(re);
     if (w) return `${fmt(val)} ${s.slice(w[0].length)}`.replace(/\s+/g, " ").trim();
   }
+  if (UNIT.test(s)) return `1 ${s}`;
   return s;
 }
 
@@ -73,6 +79,7 @@ export function canScale(text: string): boolean {
   if (/^\d/.test(s) || /^[½¼¾⅓⅔⅛⅜]/.test(s)) return true;
   if (WORDS.some(([re]) => re.test(s))) return true;
   if (DUALS.some(([re]) => re.test(s))) return true;
+  if (UNIT.test(s)) return true;
   return false;
 }
 
@@ -97,6 +104,7 @@ export function scaleIngredient(text: string, factor: number): string {
     const w = s.match(re);
     if (w) return fmt(val * factor) + " " + s.slice(w[0].length);
   }
+  if (UNIT.test(s)) return fmt(1 * factor) + " " + s;
   return text;
 }
 
