@@ -65,6 +65,19 @@ input,
 select,
 textarea {
   font-family: inherit;
+  background: var(--card);
+  color: var(--ink);
+}
+input::placeholder,
+textarea::placeholder {
+  color: var(--muted);
+}
+select option {
+  background: var(--card);
+  color: var(--ink);
+}
+.spin {
+  animation: spin 0.8s linear infinite;
 }
 
 .container {

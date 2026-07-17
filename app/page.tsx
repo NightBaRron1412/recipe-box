@@ -12,9 +12,12 @@ export default async function Home({
   const { q = "", tag = "", collection = "" } = await searchParams;
 
   const sb = supabasePublic();
+  // Only the columns the gallery needs — skip heavy steps/raw/caption for speed.
   const { data } = await sb
     .from("recipes")
-    .select("*")
+    .select(
+      "id,created_at,source_url,platform,author,title,image_url,ingredients,tags,servings,time_minutes,status,favorite,collections"
+    )
     .order("created_at", { ascending: false })
     .limit(500);
 

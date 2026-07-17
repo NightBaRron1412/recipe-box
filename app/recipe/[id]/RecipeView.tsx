@@ -240,7 +240,8 @@ export default function RecipeView({
                   else alert("تعذّرت إعادة المحاولة.");
                 }}
               >
-                <Icon name="refresh" size={17} /> {busy ? "..." : "إعادة الاستخراج"}
+                <Icon name="refresh" size={17} className={busy ? "spin" : ""} />{" "}
+                {busy ? "جاري الاستخراج..." : "إعادة الاستخراج"}
               </button>
             )}
             {hasSource && (

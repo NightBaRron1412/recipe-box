@@ -48,6 +48,26 @@ function fmt(n: number): string {
   return String(r);
 }
 
+/**
+ * Rewrite a leading Arabic word/dual quantity into canonical digit form
+ * ("كوبين حليب" -> "2 كوب حليب", "نصف كوب" -> "½ كوب", "٣ أكواب" -> "3 أكواب").
+ * Makes stored ingredients consistently scalable. Non-quantity lines pass through
+ * (with Arabic-Indic digits converted to latin).
+ */
+export function normalizeQuantity(text: string): string {
+  if (!text) return text;
+  const s = toLatin(text.trim());
+  for (const [re, singular] of DUALS) {
+    const d = s.match(re);
+    if (d) return `2 ${singular} ${s.slice(d[0].length)}`.replace(/\s+/g, " ").trim();
+  }
+  for (const [re, val] of WORDS) {
+    const w = s.match(re);
+    if (w) return `${fmt(val)} ${s.slice(w[0].length)}`.replace(/\s+/g, " ").trim();
+  }
+  return s;
+}
+
 export function canScale(text: string): boolean {
   const s = toLatin(text.trim());
   if (/^\d/.test(s) || /^[½¼¾⅓⅔⅛⅜]/.test(s)) return true;

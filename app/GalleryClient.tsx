@@ -155,7 +155,7 @@ export default function GalleryClient({
             aria-label="إضافة من صورة"
             disabled={uploading}
           >
-            <Icon name="camera" />
+            <Icon name={uploading ? "refresh" : "camera"} className={uploading ? "spin" : ""} />
           </button>
           <ThemeToggle />
           <CartLink />

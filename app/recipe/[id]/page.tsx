@@ -20,7 +20,7 @@ export default async function RecipePage({
   if (recipe.tags?.length) {
     const { data: rel } = await sb
       .from("recipes")
-      .select("*")
+      .select("id,title,image_url")
       .overlaps("tags", recipe.tags)
       .neq("id", id)
       .limit(6);

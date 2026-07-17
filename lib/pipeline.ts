@@ -7,6 +7,7 @@ import {
   extractRecipeFromImage,
 } from "./gemini";
 import type { ExtractedRecipe } from "./types";
+import { normalizeQuantity } from "./scale";
 import {
   sendMessage,
   escapeHtml,
@@ -305,8 +306,13 @@ export async function saveFromUrl(url: string): Promise<SaveResult> {
   if (cleaned.title) meta.title = cleaned.title;
   if (!meta.author && cleaned.author) meta.author = cleaned.author;
 
+  // Optimization: reel captions are usually teasers. Only spend a Gemini call on
+  // the caption for non-video platforms or genuinely long captions; otherwise go
+  // straight to the video/audio (saves a call = faster + avoids quota limits).
+  const richCaption = (meta.caption || "").length >= 250;
+  const doCaption = !VIDEO_PLATFORMS.has(platform) || richCaption;
   const [captionExtract, freshImage] = await Promise.all([
-    extractRecipe({ title: meta.title, caption: meta.caption }),
+    doCaption ? extractRecipe({ title: meta.title, caption: meta.caption }) : Promise.resolve(null),
     persistImage(sb, id, meta.image),
   ]);
   let extracted: ExtractedRecipe | null = captionExtract;
@@ -332,7 +338,7 @@ export async function saveFromUrl(url: string): Promise<SaveResult> {
     }
   }
 
-  const ingredients = extracted?.ingredients ?? [];
+  const ingredients = (extracted?.ingredients ?? []).map(normalizeQuantity);
   const steps = extracted?.steps ?? [];
   const title =
     (extracted?.is_recipe && extracted.title) || meta.title || "وصفة بدون عنوان";
@@ -422,7 +428,7 @@ export async function saveFromImage(
     uploadImageBuffer(sb, id, buf, mimeType),
   ]);
 
-  const ingredients = extracted?.ingredients ?? [];
+  const ingredients = (extracted?.ingredients ?? []).map(normalizeQuantity);
   const steps = extracted?.steps ?? [];
   const title = (extracted?.is_recipe && extracted.title) || "وصفة من صورة";
   const captionUrl = opts?.caption ? extractUrl(opts.caption) : null;
@@ -528,7 +534,7 @@ export async function processVideo(opts: {
     })(),
   ]);
 
-  const ingredients = extracted?.ingredients ?? [];
+  const ingredients = (extracted?.ingredients ?? []).map(normalizeQuantity);
   const steps = extracted?.steps ?? [];
   const title = (extracted?.is_recipe && extracted.title) || "وصفة من فيديو";
   const captionUrl = opts.caption ? extractUrl(opts.caption) : null;
