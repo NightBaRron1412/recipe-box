@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Tajawal } from "next/font/google";
 import "./globals.css";
 import { RegisterSW } from "./SW";
+import { ToastHost } from "./Toast";
 
 const tajawal = Tajawal({
   subsets: ["arabic"],
@@ -39,6 +40,7 @@ export default function RootLayout({
       </head>
       <body className={tajawal.className}>
         {children}
+        <ToastHost />
         <RegisterSW />
       </body>
     </html>

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { getEditKey, setEditKey } from "@/lib/client";
 import { Icon } from "./Icon";
+import { toast } from "./Toast";
 
 export function UnlockButton() {
   const [open, setOpen] = useState(false);
@@ -40,7 +41,23 @@ export function UnlockButton() {
           {unlocked ? (
             <>
               <p>وضع التحرير مفعّل — يمكنك تعديل وحذف الوصفات.</p>
-              <button className="btn-danger" onClick={lock}>
+              <button
+                className="btn-ghost"
+                onClick={async () => {
+                  toast("جاري تنظيف الوسوم...");
+                  const res = await fetch("/api/retag", {
+                    method: "POST",
+                    headers: { "x-edit-key": getEditKey() },
+                  }).catch(() => null);
+                  if (res && res.ok) {
+                    const j = await res.json();
+                    toast(`تم توحيد الوسوم (${j.tagsBefore}→${j.tagsAfter}).`, "success");
+                  } else toast("تعذّر تنظيف الوسوم.", "error");
+                }}
+              >
+                تنظيف الوسوم
+              </button>
+              <button className="btn-danger" onClick={lock} style={{ marginTop: 8 }}>
                 إيقاف التحرير
               </button>
             </>

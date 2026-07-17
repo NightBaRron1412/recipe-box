@@ -1024,6 +1024,95 @@ html[data-theme="dark"] .chip.star {
   color: #e6c96a;
 }
 
+/* ---------- Toasts ---------- */
+.toast-host {
+  position: fixed;
+  bottom: 20px;
+  left: 0;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  z-index: 100;
+  pointer-events: none;
+  padding: 0 16px;
+}
+.toast {
+  background: var(--ink);
+  color: var(--bg);
+  padding: 11px 18px;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 500;
+  box-shadow: var(--shadow-lg);
+  max-width: 92%;
+  animation: toastIn 0.2s ease;
+}
+.toast.success {
+  background: #2f7d4f;
+  color: #fff;
+}
+.toast.error {
+  background: #b23b2c;
+  color: #fff;
+}
+@keyframes toastIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* ---------- Skeletons ---------- */
+.skeleton {
+  background: var(--line);
+  background-image: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.35), transparent);
+  background-size: 200% 100%;
+  background-repeat: no-repeat;
+  animation: shimmer 1.3s ease infinite;
+  border-radius: 8px;
+}
+html[data-theme="dark"] .skeleton {
+  background-image: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.08), transparent);
+}
+@keyframes shimmer {
+  0% { background-position: -150% 0; }
+  100% { background-position: 250% 0; }
+}
+
+/* ---------- Card quick-delete ---------- */
+.card-del {
+  position: absolute;
+  top: 8px;
+  inset-inline-end: 8px;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: none;
+  background: rgba(255, 255, 255, 0.92);
+  color: #b23b2c;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.12s;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
+  z-index: 2;
+}
+.card:hover .card-del {
+  opacity: 1;
+}
+@media (hover: none) {
+  .card-del { opacity: 1; }
+}
+
+/* ---------- Mobile ---------- */
+@media (max-width: 560px) {
+  .brand h1 { font-size: 20px; }
+  .icon-btn { width: 36px; height: 36px; }
+  .header-actions { gap: 6px; }
+  .toast { font-size: 13px; }
+}
+
 /* ---------- Print ---------- */
 @media print {
   .no-print,

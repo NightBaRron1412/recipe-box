@@ -11,6 +11,7 @@ import { CartLink } from "@/app/CartLink";
 import { ThemeToggle } from "@/app/ThemeToggle";
 import { scaleIngredient, SCALE_OPTIONS } from "@/lib/scale";
 import { Icon } from "@/app/Icon";
+import { toast } from "@/app/Toast";
 
 const PLATFORM_LABEL: Record<string, string> = {
   instagram: "انستغرام",
@@ -56,16 +57,23 @@ export default function RecipeView({
   // Personal-field writer (favorite / rating / cooked / notes).
   const patch = async (fields: Record<string, unknown>): Promise<boolean> => {
     if (!hasEditKey()) {
-      alert("فعّل وضع التحرير أولًا (زر القفل).");
+      toast("فعّل وضع التحرير أولًا (زر القفل).", "error");
       return false;
     }
+    const prev: Record<string, unknown> = {};
+    for (const k of Object.keys(fields)) prev[k] = (r as unknown as Record<string, unknown>)[k];
     setR((c) => ({ ...c, ...fields }));
     const res = await fetch(`/api/recipes/${r.id}`, {
       method: "PATCH",
       headers: { "content-type": "application/json", "x-edit-key": getEditKey() },
       body: JSON.stringify(fields),
-    });
-    return res.ok;
+    }).catch(() => null);
+    if (!res || !res.ok) {
+      setR((c) => ({ ...c, ...prev })); // revert optimistic change
+      toast("تعذّر الحفظ.", "error");
+      return false;
+    }
+    return true;
   };
 
   // Keep the screen awake while viewing a recipe (handy while cooking).
@@ -151,8 +159,9 @@ export default function RecipeView({
               setR(updated);
               setEditing(false);
               router.refresh();
+              toast("تم حفظ التعديلات.", "success");
             } else {
-              alert("فشل الحفظ — تأكد من مفتاح التحرير.");
+              toast("فشل الحفظ — تأكد من مفتاح التحرير.", "error");
             }
           }}
           onDelete={async () => {
@@ -163,8 +172,10 @@ export default function RecipeView({
               headers: { "x-edit-key": getEditKey() },
             });
             setBusy(false);
-            if (res.ok) router.push("/");
-            else alert("فشل الحذف.");
+            if (res.ok) {
+              toast("تم حذف الوصفة.", "success");
+              router.push("/");
+            } else toast("فشل الحذف.", "error");
           }}
         />
       ) : (
@@ -242,8 +253,10 @@ export default function RecipeView({
                     body: JSON.stringify({ url: r.source_url }),
                   });
                   setBusy(false);
-                  if (res.ok) router.refresh();
-                  else alert("تعذّرت إعادة المحاولة.");
+                  if (res.ok) {
+                    router.refresh();
+                    toast("تمت إعادة الاستخراج.", "success");
+                  } else toast("تعذّرت إعادة المحاولة.", "error");
                 }}
               >
                 <Icon name="refresh" size={17} className={busy ? "spin" : ""} />{" "}
@@ -389,7 +402,10 @@ export default function RecipeView({
             <button
               className="btn-ghost"
               onClick={async () => {
-                if (await patch({ notes })) setNotesSaved(true);
+                if (await patch({ notes })) {
+                  setNotesSaved(true);
+                  toast("تم حفظ الملاحظة.", "success");
+                }
               }}
             >
               {notesSaved ? "✓ حُفظت" : "حفظ الملاحظة"}
@@ -445,7 +461,8 @@ export default function RecipeView({
             const { image_url } = await res.json();
             setR((cur) => ({ ...cur, image_url }));
             router.refresh();
-          } else alert("فشل رفع الصورة.");
+            toast("تم تحديث الصورة.", "success");
+          } else toast("فشل رفع الصورة.", "error");
         }}
       />
     </div>

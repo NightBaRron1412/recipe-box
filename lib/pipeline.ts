@@ -46,6 +46,19 @@ export function detectPlatform(url: string): string {
   return "other";
 }
 
+/** Trim an overly-long fallback title (FB teaser sentences) to something tidy. */
+export function shortenTitle(t?: string | null): string | null {
+  if (!t) return t ?? null;
+  let s = t.split(/[|｜\n]/)[0].trim();
+  if (s.length > 60) {
+    s = s.slice(0, 60);
+    const sp = s.lastIndexOf(" ");
+    if (sp > 30) s = s.slice(0, sp);
+    s = s.trim() + "…";
+  }
+  return s;
+}
+
 // Platforms whose recipe may live only in the video — worth transcribing.
 const VIDEO_PLATFORMS = new Set(["instagram", "facebook", "tiktok", "youtube"]);
 const VIDEO_MAX = 35 * 1024 * 1024;
@@ -353,7 +366,7 @@ export async function saveFromUrl(url: string): Promise<SaveResult> {
   const ingredients = (extracted?.ingredients ?? []).map(normalizeQuantity);
   const steps = extracted?.steps ?? [];
   const title =
-    (extracted?.is_recipe && extracted.title) || meta.title || "وصفة بدون عنوان";
+    (extracted?.is_recipe && extracted.title) || shortenTitle(meta.title) || "وصفة بدون عنوان";
 
   let status: SaveResult["status"] = "ok";
   if (!meta.image && !meta.caption && !meta.title) status = "fetch_failed";

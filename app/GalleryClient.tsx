@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
@@ -11,6 +11,7 @@ import { ThemeToggle } from "./ThemeToggle";
 import { Icon } from "./Icon";
 import { getEditKey, hasEditKey } from "@/lib/client";
 import { arabicNormalize } from "@/lib/arabic";
+import { toast } from "./Toast";
 
 const PLATFORM_LABEL: Record<string, string> = {
   instagram: "انستغرام", facebook: "فيسبوك", tiktok: "تيك توك",
@@ -43,7 +44,24 @@ export default function GalleryClient({
   const [sort, setSort] = useState<Sort>("newest");
   const [showAllTags, setShowAllTags] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [canEdit, setCanEdit] = useState(false);
   const photoRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => setCanEdit(hasEditKey()), []);
+
+  const deleteRecipe = async (e: React.MouseEvent, id: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!confirm("حذف هذه الوصفة نهائيًا؟")) return;
+    const res = await fetch(`/api/recipes/${id}`, {
+      method: "DELETE",
+      headers: { "x-edit-key": getEditKey() },
+    }).catch(() => null);
+    if (res && res.ok) {
+      toast("تم حذف الوصفة.", "success");
+      router.refresh();
+    } else toast("فشل الحذف.", "error");
+  };
 
   const collections = useMemo(() => {
     const s = new Set<string>();
@@ -119,10 +137,11 @@ export default function GalleryClient({
 
   const onPhoto = async (file: File) => {
     if (!hasEditKey()) {
-      alert("فعّل وضع التحرير أولًا (زر القفل).");
+      toast("فعّل وضع التحرير أولًا (زر القفل).", "error");
       return;
     }
     setUploading(true);
+    toast("جاري قراءة الصورة...");
     const fd = new FormData();
     fd.append("file", file);
     try {
@@ -132,7 +151,7 @@ export default function GalleryClient({
       if (res.ok) {
         const r = await res.json();
         router.push(`/recipe/${r.id}`);
-      } else alert("تعذّرت قراءة الصورة.");
+      } else toast("تعذّرت قراءة الصورة.", "error");
     } finally {
       setUploading(false);
     }
@@ -140,12 +159,12 @@ export default function GalleryClient({
 
   const exportBackup = async () => {
     if (!hasEditKey()) {
-      alert("فعّل وضع التحرير أولًا (زر القفل).");
+      toast("فعّل وضع التحرير أولًا (زر القفل).", "error");
       return;
     }
     const res = await fetch("/api/export", { headers: { "x-edit-key": getEditKey() } });
     if (!res.ok) {
-      alert("تعذّر التصدير.");
+      toast("تعذّر التصدير.", "error");
       return;
     }
     const data = await res.json();
@@ -303,6 +322,11 @@ export default function GalleryClient({
                   {dupTitles.has(norm(r.title)) && <span className="dup-badge">مكرر؟</span>}
                 </div>
                 {r.favorite && <span className="fav-badge"><Icon name="heartFilled" size={16} /></span>}
+                {canEdit && (
+                  <button className="card-del" onClick={(e) => deleteRecipe(e, r.id)} aria-label="حذف">
+                    <Icon name="trash" size={14} />
+                  </button>
+                )}
               </div>
               <div className="card-body">
                 <h3 className="card-title">{r.title || "وصفة بدون عنوان"}</h3>
