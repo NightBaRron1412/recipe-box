@@ -941,19 +941,20 @@ html[data-theme="dark"] .fav-filter.active {
   font-size: 13px;
   font-weight: 500;
 }
-.related-card img,
-.related-ph {
+.related-img-wrap {
+  position: relative;
   width: 100%;
   aspect-ratio: 1 / 1;
-  object-fit: cover;
   border-radius: 12px;
+  overflow: hidden;
   background: var(--accent-soft);
 }
 .related-ph {
+  position: absolute;
+  inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 30px;
   color: var(--accent);
 }
 .related-card span {
@@ -961,6 +962,66 @@ html[data-theme="dark"] .fav-filter.active {
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+/* ---------- Hero (optimized) ---------- */
+.hero-wrap {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 3 / 2;
+  max-height: 440px;
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--accent-soft);
+  box-shadow: var(--shadow);
+}
+
+/* ---------- Notes / rating / cooked ---------- */
+.personal-row {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.stars {
+  display: flex;
+}
+.star-btn {
+  background: none;
+  border: none;
+  font-size: 26px;
+  color: #e0a33a;
+  cursor: pointer;
+  padding: 0 2px;
+  line-height: 1;
+}
+.notes-area {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  margin-bottom: 10px;
+  resize: vertical;
+  font-size: 15px;
+}
+.cooked-badge {
+  background: var(--green-soft);
+  color: var(--green);
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.chip.star {
+  background: #fbf0d8;
+  color: #a8791e;
+}
+html[data-theme="dark"] .chip.star {
+  background: #3a3016;
+  color: #e6c96a;
 }
 
 /* ---------- Print ---------- */

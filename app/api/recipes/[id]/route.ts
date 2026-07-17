@@ -21,6 +21,9 @@ const EDITABLE = new Set([
   "image_url",
   "favorite",
   "collections",
+  "notes",
+  "rating",
+  "cooked",
 ]);
 
 export async function PATCH(
@@ -42,8 +45,11 @@ export async function PATCH(
     if (k === "time_minutes") {
       const n = Number(v);
       update[k] = Number.isFinite(n) && n > 0 ? Math.round(n) : null;
-    } else if (k === "favorite") {
+    } else if (k === "favorite" || k === "cooked") {
       update[k] = Boolean(v);
+    } else if (k === "rating") {
+      const n = Number(v);
+      update[k] = Number.isFinite(n) && n >= 0 && n <= 5 ? Math.round(n) : null;
     } else if (
       k === "ingredients" ||
       k === "steps" ||

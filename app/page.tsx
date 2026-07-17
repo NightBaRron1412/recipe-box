@@ -16,7 +16,7 @@ export default async function Home({
   const { data } = await sb
     .from("recipes")
     .select(
-      "id,created_at,source_url,platform,author,title,image_url,ingredients,tags,servings,time_minutes,status,favorite,collections"
+      "id,created_at,source_url,platform,author,title,image_url,ingredients,tags,servings,time_minutes,status,favorite,collections,rating,cooked"
     )
     .order("created_at", { ascending: false })
     .limit(500);

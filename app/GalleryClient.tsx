@@ -10,6 +10,7 @@ import { CartLink } from "./CartLink";
 import { ThemeToggle } from "./ThemeToggle";
 import { Icon } from "./Icon";
 import { getEditKey, hasEditKey } from "@/lib/client";
+import { arabicNormalize } from "@/lib/arabic";
 
 const PLATFORM_LABEL: Record<string, string> = {
   instagram: "انستغرام", facebook: "فيسبوك", tiktok: "تيك توك",
@@ -38,6 +39,7 @@ export default function GalleryClient({
   const [status, setStatus] = useState("");
   const [collection, setCollection] = useState(initialCollection);
   const [onlyFav, setOnlyFav] = useState(false);
+  const [onlyCooked, setOnlyCooked] = useState(false);
   const [sort, setSort] = useState<Sort>("newest");
   const [showAllTags, setShowAllTags] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -71,16 +73,20 @@ export default function GalleryClient({
   }, [recipes]);
 
   const filtered = useMemo(() => {
-    const needle = q.trim().toLowerCase();
+    const needle = arabicNormalize(q);
     let list = recipes.filter((r) => {
       if (onlyFav && !r.favorite) return false;
+      if (onlyCooked && !r.cooked) return false;
       if (collection && !(r.collections || []).includes(collection)) return false;
       if (platform && r.platform !== platform) return false;
       if (status && r.status !== status) return false;
       if (tags.length && !tags.every((t) => (r.tags || []).includes(t))) return false;
       if (needle) {
-        const hay = [r.title, r.caption, r.author, ...(r.tags || []), ...(r.ingredients || [])]
-          .filter(Boolean).join(" ").toLowerCase();
+        const hay = arabicNormalize(
+          [r.title, r.caption, r.author, ...(r.tags || []), ...(r.ingredients || [])]
+            .filter(Boolean)
+            .join(" ")
+        );
         if (!hay.includes(needle)) return false;
       }
       return true;
@@ -92,16 +98,17 @@ export default function GalleryClient({
       return b.created_at.localeCompare(a.created_at);
     });
     return list;
-  }, [recipes, q, tags, platform, status, sort, onlyFav, collection]);
+  }, [recipes, q, tags, platform, status, sort, onlyFav, onlyCooked, collection]);
 
   const toggleTag = (t: string) =>
     setTags((cur) => (cur.includes(t) ? cur.filter((x) => x !== t) : [...cur, t]));
 
   const activeFilters =
     tags.length + (platform ? 1 : 0) + (status ? 1 : 0) + (q.trim() ? 1 : 0) +
-    (onlyFav ? 1 : 0) + (collection ? 1 : 0);
+    (onlyFav ? 1 : 0) + (onlyCooked ? 1 : 0) + (collection ? 1 : 0);
   const clearAll = () => {
-    setQ(""); setTags([]); setPlatform(""); setStatus(""); setCollection(""); setOnlyFav(false);
+    setQ(""); setTags([]); setPlatform(""); setStatus(""); setCollection("");
+    setOnlyFav(false); setOnlyCooked(false);
   };
 
   const surprise = () => {
@@ -213,6 +220,9 @@ export default function GalleryClient({
           <button className={`chip-toggle ${onlyFav ? "active" : ""}`} onClick={() => setOnlyFav((f) => !f)}>
             <Icon name={onlyFav ? "heartFilled" : "heart"} size={16} /> المفضلة
           </button>
+          <button className={`chip-toggle ${onlyCooked ? "active" : ""}`} onClick={() => setOnlyCooked((c) => !c)}>
+            <Icon name="check" size={16} /> طبختها
+          </button>
           {collections.length > 0 && (
             <select value={collection} onChange={(e) => setCollection(e.target.value)}>
               <option value="">كل المجموعات</option>
@@ -289,6 +299,7 @@ export default function GalleryClient({
                 )}
                 <div className="badges-top">
                   {r.status === "needs_review" && <span className="review-badge">بحاجة لمراجعة</span>}
+                  {r.cooked && <span className="cooked-badge"><Icon name="check" size={12} /> طبختها</span>}
                   {dupTitles.has(norm(r.title)) && <span className="dup-badge">مكرر؟</span>}
                 </div>
                 {r.favorite && <span className="fav-badge"><Icon name="heartFilled" size={16} /></span>}
@@ -296,6 +307,7 @@ export default function GalleryClient({
               <div className="card-body">
                 <h3 className="card-title">{r.title || "وصفة بدون عنوان"}</h3>
                 <div className="card-meta">
+                  {r.rating ? <span className="chip star">★ {r.rating}</span> : null}
                   {r.time_minutes ? (
                     <span className="chip time"><Icon name="clock" size={13} /> {r.time_minutes} د</span>
                   ) : null}

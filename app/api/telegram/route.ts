@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { waitUntil } from "@vercel/functions";
-import { extractUrl, processVideo, processPhoto } from "@/lib/pipeline";
+import { extractUrl, extractUrls, processVideo, processPhoto } from "@/lib/pipeline";
 import { sendMessage } from "@/lib/telegram";
 import { enqueueJob, triggerWorker } from "@/lib/queue";
 
@@ -91,19 +91,24 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true });
   }
 
-  const url = extractUrl(text);
-  if (!url) {
+  const urls = extractUrls(text);
+  if (!urls.length) {
     await sendMessage(
       chatId,
-      "من فضلك أرسل رابط وصفة (انستغرام / فيسبوك / تيك توك). 🔗"
+      "من فضلك أرسل رابط وصفة (انستغرام / فيسبوك / تيك توك)."
     );
     return NextResponse.json({ ok: true });
   }
 
-  // 4) Enqueue the link and kick the worker. The queue serialises Gemini calls,
-  //    so sending many links at once never trips the rate limit.
-  await sendMessage(chatId, "⏳ جاري حفظ الوصفة...");
-  await enqueueJob(url, chatId);
+  // 4) Enqueue every link and kick the worker. The queue serialises Gemini
+  //    calls, so sending many links at once never trips the rate limit.
+  for (const u of urls) await enqueueJob(u, chatId);
+  await sendMessage(
+    chatId,
+    urls.length === 1
+      ? "⏳ جاري حفظ الوصفة..."
+      : `⏳ أضفت ${urls.length} روابط للطابور، سأرسل كل وصفة عند جهوزها.`
+  );
   waitUntil(triggerWorker());
 
   return NextResponse.json({ ok: true });

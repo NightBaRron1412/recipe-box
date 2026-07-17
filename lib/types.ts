@@ -26,6 +26,9 @@ export interface Recipe {
   favorite: boolean;
   collections: string[];
   nutrition: Nutrition | null;
+  notes: string | null;
+  rating: number | null;
+  cooked: boolean;
 }
 
 export interface ExtractedRecipe {

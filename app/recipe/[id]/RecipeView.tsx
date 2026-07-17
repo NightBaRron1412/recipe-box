@@ -2,15 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import type { Recipe } from "@/lib/types";
-import {
-  getEditKey,
-  hasEditKey,
-  getChecked,
-  setChecked,
-  addToShopping,
-} from "@/lib/client";
+import { getEditKey, hasEditKey, addToShopping } from "@/lib/client";
 import { UnlockButton } from "@/app/Unlock";
 import { CartLink } from "@/app/CartLink";
 import { ThemeToggle } from "@/app/ThemeToggle";
@@ -42,17 +37,36 @@ export default function RecipeView({
   const [copied, setCopied] = useState(false);
   const [added, setAdded] = useState(false);
   const [scale, setScale] = useState(1);
+  const [notes, setNotes] = useState(recipe.notes || "");
+  const [notesSaved, setNotesSaved] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
+  // Cook mode starts fresh (all unchecked) every visit.
   useEffect(() => {
     setCanEdit(hasEditKey());
-    setCheckedState(getChecked(recipe.id));
+    setCheckedState([]);
   }, [recipe.id]);
 
   // Keep in sync when the server re-renders (e.g. after retry via router.refresh).
   useEffect(() => {
     setR(recipe);
+    setNotes(recipe.notes || "");
   }, [recipe]);
+
+  // Personal-field writer (favorite / rating / cooked / notes).
+  const patch = async (fields: Record<string, unknown>): Promise<boolean> => {
+    if (!hasEditKey()) {
+      alert("فعّل وضع التحرير أولًا (زر القفل).");
+      return false;
+    }
+    setR((c) => ({ ...c, ...fields }));
+    const res = await fetch(`/api/recipes/${r.id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json", "x-edit-key": getEditKey() },
+      body: JSON.stringify(fields),
+    });
+    return res.ok;
+  };
 
   // Keep the screen awake while viewing a recipe (handy while cooking).
   useEffect(() => {
@@ -62,26 +76,10 @@ export default function RecipeView({
     return () => lock?.release?.();
   }, []);
 
-  const toggleFavorite = async () => {
-    if (!hasEditKey()) {
-      alert("فعّل وضع التحرير أولًا (زر القفل) لتتمكن من الحفظ في المفضلة.");
-      return;
-    }
-    const next = !r.favorite;
-    setR((c) => ({ ...c, favorite: next }));
-    await fetch(`/api/recipes/${r.id}`, {
-      method: "PATCH",
-      headers: { "content-type": "application/json", "x-edit-key": getEditKey() },
-      body: JSON.stringify({ favorite: next }),
-    }).catch(() => setR((c) => ({ ...c, favorite: !next })));
-  };
+  const toggleFavorite = () => patch({ favorite: !r.favorite });
 
   const toggleCheck = (i: number) => {
-    const next = checked.includes(i)
-      ? checked.filter((x) => x !== i)
-      : [...checked, i];
-    setCheckedState(next);
-    setChecked(r.id, next);
+    setCheckedState((cur) => (cur.includes(i) ? cur.filter((x) => x !== i) : [...cur, i]));
   };
 
   const platformLabel = PLATFORM_LABEL[r.platform || "other"] || "المصدر";
@@ -172,8 +170,16 @@ export default function RecipeView({
       ) : (
         <>
           {r.image_url && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={r.image_url} alt={r.title || "وصفة"} className="recipe-hero" />
+            <div className="hero-wrap">
+              <Image
+                src={r.image_url}
+                alt={r.title || "وصفة"}
+                fill
+                sizes="(max-width:900px) 100vw, 860px"
+                style={{ objectFit: "cover" }}
+                priority
+              />
+            </div>
           )}
 
           <h1 className="recipe-title">{r.title || "وصفة بدون عنوان"}</h1>
@@ -348,18 +354,67 @@ export default function RecipeView({
             </div>
           )}
 
+          <div className="section no-print">
+            <h2>ملاحظاتي وتقييمي</h2>
+            <div className="personal-row">
+              <div className="stars" title="تقييم">
+                {[1, 2, 3, 4, 5].map((n) => (
+                  <button
+                    key={n}
+                    className="star-btn"
+                    onClick={() => patch({ rating: r.rating === n ? null : n })}
+                    aria-label={`${n} نجوم`}
+                  >
+                    {n <= (r.rating || 0) ? "★" : "☆"}
+                  </button>
+                ))}
+              </div>
+              <button
+                className={`chip-toggle ${r.cooked ? "active" : ""}`}
+                onClick={() => patch({ cooked: !r.cooked })}
+              >
+                <Icon name="check" size={16} /> {r.cooked ? "طبختها" : "علّمها كمطبوخة"}
+              </button>
+            </div>
+            <textarea
+              className="notes-area"
+              placeholder="ملاحظاتي وتعديلاتي على الوصفة..."
+              value={notes}
+              onChange={(e) => {
+                setNotes(e.target.value);
+                setNotesSaved(false);
+              }}
+              rows={3}
+            />
+            <button
+              className="btn-ghost"
+              onClick={async () => {
+                if (await patch({ notes })) setNotesSaved(true);
+              }}
+            >
+              {notesSaved ? "✓ حُفظت" : "حفظ الملاحظة"}
+            </button>
+          </div>
+
           {related.length > 0 && (
             <div className="section no-print">
               <h2><Icon name="utensils" size={18} /> وصفات مشابهة</h2>
               <div className="related-grid">
                 {related.map((rec) => (
                   <Link href={`/recipe/${rec.id}`} key={rec.id} className="related-card">
-                    {rec.image_url ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={rec.image_url} alt={rec.title || ""} loading="lazy" />
-                    ) : (
-                      <div className="related-ph">🍲</div>
-                    )}
+                    <div className="related-img-wrap">
+                      {rec.image_url ? (
+                        <Image
+                          src={rec.image_url}
+                          alt={rec.title || ""}
+                          fill
+                          sizes="150px"
+                          style={{ objectFit: "cover" }}
+                        />
+                      ) : (
+                        <div className="related-ph"><Icon name="hat" size={28} /></div>
+                      )}
+                    </div>
                     <span>{rec.title || "وصفة"}</span>
                   </Link>
                 ))}

@@ -31,6 +31,13 @@ export function extractUrl(text: string): string | null {
   return m ? m[0].replace(/[)\].,]+$/, "") : null;
 }
 
+/** Pull all http(s) URLs out of a message (deduped, order preserved). */
+export function extractUrls(text: string): string[] {
+  const m = text.match(/https?:\/\/[^\s]+/g) || [];
+  const cleaned = m.map((u) => u.replace(/[)\].,]+$/, ""));
+  return [...new Set(cleaned)];
+}
+
 export function detectPlatform(url: string): string {
   if (/instagram\.com/i.test(url)) return "instagram";
   if (/facebook\.com|fb\.watch|fb\.com|m\.facebook/i.test(url)) return "facebook";
