@@ -4,8 +4,14 @@ import { extractRecipe } from "./gemini";
 import { sendMessage, escapeHtml } from "./telegram";
 import type { PageMeta } from "./types";
 
-const UA =
+const BROWSER_UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
+
+// Facebook & Instagram return HTTP 400 to a normal browser UA but serve full
+// OpenGraph tags (title/description/image) to their own crawler UA. This is the
+// key that unlocks reel/post previews server-side.
+const CRAWLER_UA =
+  "facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)";
 
 /** Pull the first http(s) URL out of a message. */
 export function extractUrl(text: string): string | null {
@@ -44,26 +50,62 @@ function parseMetaTags(html: string): Record<string, string> {
   return out;
 }
 
-/** Best-effort OpenGraph fetch. Returns whatever it can; never throws. */
+function metaFromHtml(html: string): PageMeta {
+  const meta = parseMetaTags(html);
+  return {
+    image: meta["og:image"] || meta["twitter:image"],
+    caption:
+      meta["og:description"] || meta["description"] || meta["twitter:description"],
+    title: meta["og:title"] || meta["twitter:title"],
+    author: meta["og:site_name"] || meta["author"],
+  };
+}
+
+function hasContent(m: PageMeta): boolean {
+  return Boolean(m.image || m.title || m.caption);
+}
+
+async function fetchWith(url: string, ua: string): Promise<PageMeta> {
+  const res = await fetch(url, {
+    headers: { "User-Agent": ua, "Accept-Language": "ar,en;q=0.9" },
+    redirect: "follow",
+  });
+  if (!res.ok) return {};
+  return metaFromHtml(await res.text());
+}
+
+/**
+ * Best-effort OpenGraph fetch. Tries the FB/IG crawler UA first (required for
+ * their reels), then falls back to a browser UA for sites that prefer it.
+ * Never throws.
+ */
 export async function fetchMeta(url: string): Promise<PageMeta> {
   try {
-    const res = await fetch(url, {
-      headers: { "User-Agent": UA, "Accept-Language": "ar,en;q=0.9" },
-      redirect: "follow",
-    });
-    if (!res.ok) return {};
-    const html = await res.text();
-    const meta = parseMetaTags(html);
-    return {
-      image: meta["og:image"] || meta["twitter:image"],
-      caption: meta["og:description"] || meta["description"] || meta["twitter:description"],
-      title: meta["og:title"] || meta["twitter:title"],
-      author: meta["og:site_name"] || meta["author"],
-    };
+    const primary = await fetchWith(url, CRAWLER_UA);
+    if (hasContent(primary)) return primary;
+    const fallback = await fetchWith(url, BROWSER_UA);
+    return hasContent(fallback) ? fallback : primary;
   } catch (e) {
     console.error("fetchMeta failed", e);
     return {};
   }
+}
+
+/**
+ * FB/IG set og:title to "<views> · <reactions> | <caption line> | <author>".
+ * Strip the stats segment and pull the author out so titles read cleanly.
+ */
+export function cleanSocialTitle(raw?: string): { title?: string; author?: string } {
+  if (!raw) return {};
+  const parts = raw.split("|").map((s) => s.trim()).filter(Boolean);
+  const isStats = (s: string) =>
+    /(مشاهدة|تفاعل|إعجاب|تعليق|مشاركة|views?|reactions?|likes?|comments?|shares?)/i.test(s) &&
+    /(\d|ألف|k|m|مليون|thousand|million)/i.test(s);
+  const kept = parts.filter((p) => !isStats(p));
+  let author: string | undefined;
+  if (kept.length > 1) author = kept.pop();
+  const title = kept.join(" — ").trim() || undefined;
+  return { title, author };
 }
 
 /** Download the cover image and store it in Supabase Storage. Returns public URL or null. */
@@ -74,7 +116,7 @@ async function persistImage(
 ): Promise<string | null> {
   if (!imageUrl) return null;
   try {
-    const res = await fetch(imageUrl, { headers: { "User-Agent": UA } });
+    const res = await fetch(imageUrl, { headers: { "User-Agent": BROWSER_UA } });
     if (!res.ok) return null;
     const buf = Buffer.from(await res.arrayBuffer());
     const ct = res.headers.get("content-type") || "image/jpeg";
@@ -104,6 +146,12 @@ export async function processShare(url: string, chatId: number): Promise<void> {
   const platform = detectPlatform(url);
 
   const meta = await fetchMeta(url);
+
+  // Clean FB/IG title ("views · reactions | caption | author") and lift author.
+  const cleaned = cleanSocialTitle(meta.title);
+  if (cleaned.title) meta.title = cleaned.title;
+  if (!meta.author && cleaned.author) meta.author = cleaned.author;
+
   const [extracted, image_url] = await Promise.all([
     extractRecipe({ title: meta.title, caption: meta.caption }),
     persistImage(sb, id, meta.image),
