@@ -41,11 +41,22 @@ export function detectPlatform(url: string): string {
 // Platforms whose recipe may live only in the video — worth transcribing.
 const VIDEO_PLATFORMS = new Set(["instagram", "facebook", "tiktok", "youtube"]);
 const VIDEO_MAX = 35 * 1024 * 1024;
+const AUDIO_MAX = 20 * 1024 * 1024;
+// Above this duration, transcribe the (tiny) audio track instead of the video —
+// long videos are hundreds of MB and won't fit the function's time/size budget.
+const LONG_VIDEO_SECONDS = 180;
 
-/** Ask the resolver microservice to turn a page URL into a direct video URL. */
-async function resolveVideoUrl(
-  pageUrl: string
-): Promise<{ video_url?: string; title?: string; uploader?: string } | null> {
+interface Resolved {
+  video_url?: string;
+  audio_url?: string;
+  video_filesize?: number;
+  duration?: number;
+  title?: string;
+  uploader?: string;
+}
+
+/** Ask the resolver microservice to turn a page URL into direct media URLs. */
+async function resolveVideoUrl(pageUrl: string): Promise<Resolved | null> {
   const endpoint = process.env.RESOLVER_URL;
   if (!endpoint) return null;
   try {
@@ -59,7 +70,7 @@ async function resolveVideoUrl(
     });
     if (!res.ok) return null;
     const j = await res.json();
-    if (!j?.video_url) {
+    if (!j?.video_url && !j?.audio_url) {
       if (j?.error) console.error("resolver error", j.error);
       return null;
     }
@@ -70,22 +81,58 @@ async function resolveVideoUrl(
   }
 }
 
-/** Download a resolved video, guarding against oversized files. */
-async function fetchVideoBuffer(url: string): Promise<Buffer | null> {
+/** Download a resolved media URL, aborting if it exceeds maxBytes. */
+async function fetchMedia(url: string, maxBytes: number): Promise<Buffer | null> {
   try {
     const res = await fetch(url, { headers: { "User-Agent": BROWSER_UA } });
     if (!res.ok) return null;
     const len = Number(res.headers.get("content-length") || 0);
-    if (len && len > VIDEO_MAX) {
-      console.error("resolved video too large", len);
+    if (len && len > maxBytes) {
+      console.error("resolved media too large", len);
       return null;
     }
     const buf = Buffer.from(await res.arrayBuffer());
-    return buf.length > VIDEO_MAX ? null : buf;
+    return buf.length > maxBytes ? null : buf;
   } catch (e) {
-    console.error("fetchVideoBuffer failed", e);
+    console.error("fetchMedia failed", e);
     return null;
   }
+}
+
+/**
+ * Fetch a recipe from a resolved reel/video: use the video for short clips
+ * (captures on-screen text), fall back to the audio track for long ones.
+ */
+async function transcribeResolved(
+  url: string,
+  caption?: string
+): Promise<ExtractedRecipe | null> {
+  const resolved = await resolveVideoUrl(url);
+  if (!resolved) return null;
+
+  const isLong =
+    (resolved.duration ?? 0) > LONG_VIDEO_SECONDS ||
+    (resolved.video_filesize ?? 0) > VIDEO_MAX;
+
+  let media: Buffer | null = null;
+  let mime = "video/mp4";
+
+  if (!isLong && resolved.video_url) {
+    media = await fetchMedia(resolved.video_url, VIDEO_MAX);
+  }
+  if (!media && resolved.audio_url) {
+    media = await fetchMedia(resolved.audio_url, AUDIO_MAX);
+    if (media) mime = "audio/mp4";
+  }
+  if (!media && resolved.video_url) {
+    media = await fetchMedia(resolved.video_url, VIDEO_MAX);
+  }
+  if (!media) return null;
+
+  // Intentionally NOT passing the caption: reel captions are often teasers
+  // ("ألذ وصفة بدون فرن!") that mislead the model into is_recipe=false.
+  void caption;
+  return extractRecipeFromVideo(media, mime);
 }
 
 function decodeEntities(s: string): string {
@@ -272,13 +319,9 @@ export async function saveFromUrl(url: string): Promise<SaveResult> {
   if (!captionHasRecipe && VIDEO_PLATFORMS.has(platform)) {
     let fromVideo: ExtractedRecipe | null = null;
     if (platform === "youtube") {
-      fromVideo = await extractRecipeFromYouTube(url, meta.caption);
+      fromVideo = await extractRecipeFromYouTube(url);
     } else {
-      const resolved = await resolveVideoUrl(url);
-      if (resolved?.video_url) {
-        const vbuf = await fetchVideoBuffer(resolved.video_url);
-        if (vbuf) fromVideo = await extractRecipeFromVideo(vbuf, "video/mp4", meta.caption);
-      }
+      fromVideo = await transcribeResolved(url, meta.caption);
     }
     if (
       fromVideo?.is_recipe &&

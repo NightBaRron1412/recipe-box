@@ -1,9 +1,10 @@
 import type { ExtractedRecipe } from "./types";
 
 const BASE = "https://generativelanguage.googleapis.com";
-// `gemini-flash-latest` auto-tracks the newest free-tier Flash model, so we
-// don't break when Google retires a version (e.g. 2.0-flash shut down 2026-06).
-const MODEL = process.env.GEMINI_MODEL || "gemini-flash-latest";
+// flash-lite has by far the highest free-tier daily quota (flash-latest points
+// to 3.5-flash which is capped at ~20 requests/day). flash-lite handles
+// text/image/audio/video, which is all we need.
+const MODEL = process.env.GEMINI_MODEL || "gemini-flash-lite-latest";
 
 const SCHEMA_HINT = `الحقول المطلوبة:
 {
@@ -33,7 +34,12 @@ const VIDEO_PROMPT = `هذا فيديو لوصفة طبخ. استمع جيدًا
 
 ${SCHEMA_HINT}`;
 
-async function callGemini(parts: unknown[]): Promise<ExtractedRecipe | null> {
+const AUDIO_PROMPT = `هذا مقطع صوتي لوصفة طبخ (صوت من فيديو). استمع جيدًا إلى الشرح المنطوق
+واستخرج الوصفة كاملة، وأعِد النتيجة بصيغة JSON فقط، وكل النصوص بالعربية الفصحى (ترجم إن لزم).
+
+${SCHEMA_HINT}`;
+
+async function callGemini(parts: unknown[], attempt = 0): Promise<ExtractedRecipe | null> {
   const key = process.env.GEMINI_API_KEY;
   if (!key) return null;
   try {
@@ -45,6 +51,11 @@ async function callGemini(parts: unknown[]): Promise<ExtractedRecipe | null> {
         generationConfig: { temperature: 0.2, responseMimeType: "application/json" },
       }),
     });
+    // Per-minute rate limit — wait once and retry (within the function budget).
+    if (res.status === 429 && attempt < 1) {
+      await new Promise((r) => setTimeout(r, 9000));
+      return callGemini(parts, attempt + 1);
+    }
     if (!res.ok) {
       console.error("gemini generate error", res.status, await res.text());
       return null;
@@ -135,7 +146,8 @@ export async function extractRecipeFromVideo(
   mimeType: string,
   extra?: string
 ): Promise<ExtractedRecipe | null> {
-  const promptText = VIDEO_PROMPT + (extra ? `\n\nنص مرفق مع الفيديو:\n${extra}` : "");
+  const base = mimeType.startsWith("audio/") ? AUDIO_PROMPT : VIDEO_PROMPT;
+  const promptText = base + (extra ? `\n\nنص مرفق:\n${extra}` : "");
   if (buf.length <= INLINE_MAX) {
     return callGemini([
       { text: promptText },
