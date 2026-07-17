@@ -143,18 +143,40 @@ async function resolveVideoUrl(pageUrl: string): Promise<Resolved | null> {
   }
 }
 
+/** Read a response body, aborting once it exceeds maxBytes (streams, so a
+ * missing/incorrect Content-Length can't blow up memory). */
+async function readLimited(res: Response, maxBytes: number): Promise<Buffer | null> {
+  const len = Number(res.headers.get("content-length") || 0);
+  if (len && len > maxBytes) return null;
+  const body = res.body;
+  if (!body) {
+    const b = Buffer.from(await res.arrayBuffer());
+    return b.length > maxBytes ? null : b;
+  }
+  const reader = body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (value) {
+      total += value.length;
+      if (total > maxBytes) {
+        await reader.cancel().catch(() => {});
+        return null;
+      }
+      chunks.push(value);
+    }
+  }
+  return Buffer.concat(chunks);
+}
+
 /** Download a resolved media URL, aborting if it exceeds maxBytes. */
 async function fetchMedia(url: string, maxBytes: number): Promise<Buffer | null> {
   try {
     const res = await fetch(url, { headers: { "User-Agent": BROWSER_UA } });
     if (!res.ok) return null;
-    const len = Number(res.headers.get("content-length") || 0);
-    if (len && len > maxBytes) {
-      console.error("resolved media too large", len);
-      return null;
-    }
-    const buf = Buffer.from(await res.arrayBuffer());
-    return buf.length > maxBytes ? null : buf;
+    return await readLimited(res, maxBytes);
   } catch (e) {
     console.error("fetchMedia failed", e);
     return null;
@@ -308,7 +330,8 @@ async function persistImage(
   try {
     const res = await fetch(imageUrl, { headers: { "User-Agent": BROWSER_UA } });
     if (!res.ok) return null;
-    const buf = Buffer.from(await res.arrayBuffer());
+    const buf = await readLimited(res, 10 * 1024 * 1024);
+    if (!buf) return null;
     return uploadImageBuffer(sb, id, buf, res.headers.get("content-type") || "image/jpeg");
   } catch (e) {
     console.error("persistImage failed", e);

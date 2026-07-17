@@ -9,7 +9,7 @@ export interface Job {
 
 const LEASE_MS = 90_000;
 
-export async function enqueueJob(url: string, chatId: number): Promise<void> {
+export async function enqueueJob(url: string, chatId: number | null): Promise<void> {
   await supabaseAdmin().from("jobs").insert({ url, chat_id: chatId });
 }
 

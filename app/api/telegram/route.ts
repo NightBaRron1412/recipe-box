@@ -11,7 +11,8 @@ export async function POST(req: NextRequest) {
   // 1) Verify the secret header Telegram echoes back from setWebhook.
   const secret = req.headers.get("x-telegram-bot-api-secret-token");
   const expected = process.env.TELEGRAM_WEBHOOK_SECRET;
-  if (expected && secret !== expected) {
+  // Fail closed: reject if the secret isn't configured or doesn't match.
+  if (!expected || secret !== expected) {
     return NextResponse.json({ ok: false }, { status: 401 });
   }
 

@@ -42,9 +42,16 @@ export default async function RecipePage({
 }) {
   const { id } = await params;
   const sb = supabasePublic();
-  const { data } = await sb.from("recipes").select("*").eq("id", id).single();
+  // Note: `notes` is private (anon can't read it); it's loaded client-side when unlocked.
+  const { data } = await sb
+    .from("recipes")
+    .select(
+      "id,created_at,source_url,platform,author,title,caption,image_url,ingredients,ingredient_sections,steps,tags,servings,time_minutes,status,favorite,collections,nutrition,rating,cooked,lang"
+    )
+    .eq("id", id)
+    .single();
   if (!data) notFound();
-  const recipe = data as Recipe;
+  const recipe = { ...(data as Recipe), notes: null };
 
   let related: Recipe[] = [];
   if (recipe.tags?.length) {

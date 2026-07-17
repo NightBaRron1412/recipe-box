@@ -26,6 +26,24 @@ const EDITABLE = new Set([
   "cooked",
 ]);
 
+// Returns private fields (notes) — only for the owner (edit key).
+export async function GET(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  if (!authorized(req)) {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
+  const { id } = await params;
+  const { data, error } = await supabaseAdmin()
+    .from("recipes")
+    .select("notes")
+    .eq("id", id)
+    .single();
+  if (error) return NextResponse.json({ error: error.message }, { status: 404 });
+  return NextResponse.json({ notes: data?.notes ?? null });
+}
+
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }

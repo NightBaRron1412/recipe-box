@@ -44,8 +44,21 @@ export default function RecipeView({
 
   // Cook mode starts fresh (all unchecked) every visit.
   useEffect(() => {
-    setCanEdit(hasEditKey());
+    const editable = hasEditKey();
+    setCanEdit(editable);
     setCheckedState([]);
+    // notes are private (not in the public payload) — load them when unlocked.
+    if (editable) {
+      fetch(`/api/recipes/${recipe.id}`, { headers: { "x-edit-key": getEditKey() } })
+        .then((res) => (res.ok ? res.json() : null))
+        .then((d) => {
+          if (d && typeof d.notes === "string") {
+            setNotes(d.notes);
+            setR((c) => ({ ...c, notes: d.notes }));
+          }
+        })
+        .catch(() => {});
+    }
   }, [recipe.id]);
 
   // Keep in sync when the server re-renders (e.g. after retry via router.refresh).
