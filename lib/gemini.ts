@@ -15,7 +15,7 @@ const SCHEMA_HINT = `الحقول المطلوبة:
   "tags": string[],            // وسوم قصيرة بالعربية مثل: حلويات، سريع، دجاج، نباتي
   "servings": string | null,   // عدد الحصص إن ذُكر
   "time_minutes": number | null, // وقت التحضير بالدقائق إن أمكن تقديره
-  "nutrition": {               // تقدير تقريبي للقيم الغذائية للحصة الواحدة، أو null
+  "nutrition": {               // تقدير تقريبي للقيم الغذائية لكامل الوصفة (كل المقادير مجتمعة)، أو null
     "calories": number | null, "protein_g": number | null,
     "carbs_g": number | null, "fat_g": number | null
   } | null
@@ -243,9 +243,10 @@ export async function estimateNutrition(
 ): Promise<{ calories: number | null; protein_g: number | null; carbs_g: number | null; fat_g: number | null } | null> {
   const key = process.env.GEMINI_API_KEY;
   if (!key || !ingredients.length) return null;
+  void servings;
   const prompt =
-    `قدّر القيم الغذائية التقريبية للحصة الواحدة لوصفة "${title}".\nالمكونات:\n${ingredients.join("\n")}\n` +
-    `عدد الحصص: ${servings || "غير محدد"}.\nأعِد JSON فقط بالأرقام الصحيحة (calories, protein_g, carbs_g, fat_g) أو null لكل قيمة غير معروفة.`;
+    `قدّر القيم الغذائية التقريبية لكامل وصفة "${title}" (جميع المقادير مجتمعة، وليس للحصة الواحدة).\nالمكونات:\n${ingredients.join("\n")}\n` +
+    `أعِد JSON فقط بالأرقام الصحيحة (calories, protein_g, carbs_g, fat_g) أو null لكل قيمة غير معروفة.`;
   const schema = {
     type: "object",
     properties: {

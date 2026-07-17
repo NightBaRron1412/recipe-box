@@ -12,13 +12,15 @@ export async function POST(req: NextRequest) {
   if (req.headers.get("x-edit-key") !== process.env.EDIT_KEY) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
+  const force = (await req.json().catch(() => null))?.force === true;
   const sb = supabaseAdmin();
-  const { data } = await sb
+  let q = sb
     .from("recipes")
-    .select("id, title, ingredients, servings, nutrition, status")
-    .is("nutrition", null)
+    .select("id, title, ingredients, servings, status")
     .eq("status", "ok")
     .limit(12);
+  if (!force) q = q.is("nutrition", null);
+  const { data } = await q;
 
   let updated = 0;
   for (const r of data || []) {
@@ -28,7 +30,7 @@ export async function POST(req: NextRequest) {
       await sb.from("recipes").update({ nutrition: n }).eq("id", r.id);
       updated++;
     }
-    await sleep(2500); // stay under the rate limit
+    await sleep(1500); // stay under the rate limit
   }
   return NextResponse.json({ ok: true, scanned: data?.length || 0, updated });
 }
