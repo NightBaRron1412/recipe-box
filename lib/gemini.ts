@@ -14,7 +14,11 @@ const SCHEMA_HINT = `الحقول المطلوبة:
   "steps": string[],           // خطوات التحضير مرتبة
   "tags": string[],            // وسوم قصيرة بالعربية مثل: حلويات، سريع، دجاج، نباتي
   "servings": string | null,   // عدد الحصص إن ذُكر
-  "time_minutes": number | null // وقت التحضير بالدقائق إن أمكن تقديره
+  "time_minutes": number | null, // وقت التحضير بالدقائق إن أمكن تقديره
+  "nutrition": {               // تقدير تقريبي للقيم الغذائية للحصة الواحدة، أو null
+    "calories": number | null, "protein_g": number | null,
+    "carbs_g": number | null, "fat_g": number | null
+  } | null
 }
 
 قواعد:
@@ -53,6 +57,16 @@ const RESPONSE_SCHEMA = {
     tags: { type: "array", items: { type: "string" } },
     servings: { type: "string", nullable: true },
     time_minutes: { type: "integer", nullable: true },
+    nutrition: {
+      type: "object",
+      nullable: true,
+      properties: {
+        calories: { type: "integer", nullable: true },
+        protein_g: { type: "integer", nullable: true },
+        carbs_g: { type: "integer", nullable: true },
+        fat_g: { type: "integer", nullable: true },
+      },
+    },
   },
   required: ["is_recipe", "title", "ingredients", "steps", "tags"],
 };
@@ -221,6 +235,45 @@ export async function extractRecipeFromYouTube(
   ]);
 }
 
+/** Estimate approximate per-serving nutrition from a recipe's ingredients. */
+export async function estimateNutrition(
+  title: string,
+  ingredients: string[],
+  servings?: string | null
+): Promise<{ calories: number | null; protein_g: number | null; carbs_g: number | null; fat_g: number | null } | null> {
+  const key = process.env.GEMINI_API_KEY;
+  if (!key || !ingredients.length) return null;
+  const prompt =
+    `قدّر القيم الغذائية التقريبية للحصة الواحدة لوصفة "${title}".\nالمكونات:\n${ingredients.join("\n")}\n` +
+    `عدد الحصص: ${servings || "غير محدد"}.\nأعِد JSON فقط بالأرقام الصحيحة (calories, protein_g, carbs_g, fat_g) أو null لكل قيمة غير معروفة.`;
+  const schema = {
+    type: "object",
+    properties: {
+      calories: { type: "integer", nullable: true },
+      protein_g: { type: "integer", nullable: true },
+      carbs_g: { type: "integer", nullable: true },
+      fat_g: { type: "integer", nullable: true },
+    },
+  };
+  try {
+    const res = await fetch(`${BASE}/v1beta/models/${MODEL}:generateContent`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-goog-api-key": key },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 0, responseMimeType: "application/json", responseSchema: schema },
+      }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!text) return null;
+    return normNutrition(JSON.parse(stripFences(text)));
+  } catch {
+    return null;
+  }
+}
+
 /** Ask the model to merge synonymous Arabic tags into a canonical set.
  * Returns a map of {oldTag: canonicalTag}. */
 export async function consolidateTags(tags: string[]): Promise<Record<string, string>> {
@@ -286,5 +339,20 @@ function normalize(p: any): ExtractedRecipe {
     tags: arr(p?.tags),
     servings: p?.servings ? String(p.servings) : null,
     time_minutes: typeof p?.time_minutes === "number" ? p.time_minutes : null,
+    nutrition: normNutrition(p?.nutrition),
   };
+}
+
+function normNutrition(n: any) {
+  if (!n || typeof n !== "object") return null;
+  const num = (v: any) => (typeof v === "number" && Number.isFinite(v) ? Math.round(v) : null);
+  const out = {
+    calories: num(n.calories),
+    protein_g: num(n.protein_g),
+    carbs_g: num(n.carbs_g),
+    fat_g: num(n.fat_g),
+  };
+  return out.calories == null && out.protein_g == null && out.carbs_g == null && out.fat_g == null
+    ? null
+    : out;
 }

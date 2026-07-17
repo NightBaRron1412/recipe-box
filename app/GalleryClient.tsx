@@ -2,6 +2,7 @@
 
 import { useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import type { Recipe } from "@/lib/types";
 import { UnlockButton } from "./Unlock";
@@ -130,6 +131,26 @@ export default function GalleryClient({
     }
   };
 
+  const exportBackup = async () => {
+    if (!hasEditKey()) {
+      alert("فعّل وضع التحرير أولًا (زر القفل).");
+      return;
+    }
+    const res = await fetch("/api/export", { headers: { "x-edit-key": getEditKey() } });
+    if (!res.ok) {
+      alert("تعذّر التصدير.");
+      return;
+    }
+    const data = await res.json();
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `recipes-backup-${data.length || ""}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const reviewCount = recipes.filter((r) => r.status === "needs_review").length;
   const visibleTags = showAllTags ? allTags : allTags.slice(0, 12);
 
@@ -156,6 +177,9 @@ export default function GalleryClient({
             disabled={uploading}
           >
             <Icon name={uploading ? "refresh" : "camera"} className={uploading ? "spin" : ""} />
+          </button>
+          <button className="icon-btn" onClick={exportBackup} title="نسخة احتياطية (تصدير)" aria-label="تصدير">
+            <Icon name="download" />
           </button>
           <ThemeToggle />
           <CartLink />
@@ -252,8 +276,14 @@ export default function GalleryClient({
             <Link href={`/recipe/${r.id}`} key={r.id} className="card">
               <div className="card-thumb-wrap">
                 {r.image_url ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={r.image_url} alt={r.title || "وصفة"} className="card-thumb" loading="lazy" />
+                  <Image
+                    src={r.image_url}
+                    alt={r.title || "وصفة"}
+                    fill
+                    sizes="(max-width:600px) 45vw, 230px"
+                    className="card-thumb"
+                    style={{ objectFit: "cover" }}
+                  />
                 ) : (
                   <div className="card-thumb placeholder"><Icon name="hat" size={40} /></div>
                 )}

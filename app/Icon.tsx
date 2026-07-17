@@ -92,6 +92,7 @@ const PATHS: Record<string, React.ReactNode> = {
     </>
   ),
   refresh: <path d="M3 2v6h6M3.5 12a9 9 0 1 0 2-5.3L3 8" />,
+  download: <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" />,
   play: <path d="m6 3 14 9-14 9z" fill="currentColor" stroke="none" />,
   users: (
     <>

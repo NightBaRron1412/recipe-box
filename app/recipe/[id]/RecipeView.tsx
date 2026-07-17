@@ -259,6 +259,40 @@ export default function RecipeView({
             </div>
           )}
 
+          {r.nutrition &&
+            (r.nutrition.calories != null ||
+              r.nutrition.protein_g != null ||
+              r.nutrition.carbs_g != null ||
+              r.nutrition.fat_g != null) && (
+              <div className="nutrition">
+                {r.nutrition.calories != null && (
+                  <div className="nut-item">
+                    <b>{r.nutrition.calories}</b>
+                    <span>سعرة</span>
+                  </div>
+                )}
+                {r.nutrition.protein_g != null && (
+                  <div className="nut-item">
+                    <b>{r.nutrition.protein_g}غ</b>
+                    <span>بروتين</span>
+                  </div>
+                )}
+                {r.nutrition.carbs_g != null && (
+                  <div className="nut-item">
+                    <b>{r.nutrition.carbs_g}غ</b>
+                    <span>كربوهيدرات</span>
+                  </div>
+                )}
+                {r.nutrition.fat_g != null && (
+                  <div className="nut-item">
+                    <b>{r.nutrition.fat_g}غ</b>
+                    <span>دهون</span>
+                  </div>
+                )}
+                <span className="nut-note">لكل حصة (تقديري)</span>
+              </div>
+            )}
+
           {ingredients.length > 0 && (
             <div className="section">
               <div className="section-head">

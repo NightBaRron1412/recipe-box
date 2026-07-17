@@ -335,20 +335,53 @@ html[data-theme="dark"] .dup-badge {
 }
 .card-thumb-wrap {
   position: relative;
+  aspect-ratio: 4 / 3;
+  background: var(--accent-soft);
+  overflow: hidden;
 }
 .card-thumb {
-  aspect-ratio: 4 / 3;
-  width: 100%;
   object-fit: cover;
-  background: var(--accent-soft);
-  display: block;
 }
 .card-thumb.placeholder {
+  position: absolute;
+  inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 44px;
   color: var(--accent);
+}
+
+/* Nutrition strip */
+.nutrition {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  align-items: center;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 14px 20px;
+  margin-bottom: 20px;
+  box-shadow: var(--shadow);
+}
+.nut-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 60px;
+}
+.nut-item b {
+  font-size: 18px;
+  color: var(--accent-dark);
+}
+.nut-item span {
+  font-size: 12px;
+  color: var(--muted);
+}
+.nut-note {
+  margin-inline-start: auto;
+  font-size: 12px;
+  color: var(--muted);
 }
 .platform-badge {
   position: absolute;

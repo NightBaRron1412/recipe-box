@@ -1,5 +1,12 @@
 export type RecipeStatus = "ok" | "needs_review" | "fetch_failed";
 
+export interface Nutrition {
+  calories: number | null;
+  protein_g: number | null;
+  carbs_g: number | null;
+  fat_g: number | null;
+}
+
 export interface Recipe {
   id: string;
   created_at: string;
@@ -18,6 +25,7 @@ export interface Recipe {
   lang: string | null;
   favorite: boolean;
   collections: string[];
+  nutrition: Nutrition | null;
 }
 
 export interface ExtractedRecipe {
@@ -28,6 +36,7 @@ export interface ExtractedRecipe {
   tags: string[];
   servings: string | null;
   time_minutes: number | null;
+  nutrition: Nutrition | null;
 }
 
 export interface PageMeta {

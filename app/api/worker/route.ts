@@ -10,6 +10,7 @@ import {
   markJobDone,
   markJobError,
   pendingCount,
+  purgeOldJobs,
   triggerWorker,
 } from "@/lib/queue";
 
@@ -35,6 +36,7 @@ export async function POST(req: NextRequest) {
   waitUntil(
     (async () => {
       const deadline = Date.now() + BUDGET_MS;
+      await purgeOldJobs().catch(() => {});
       try {
         while (Date.now() < deadline) {
           await renewLock();

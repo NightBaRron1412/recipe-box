@@ -74,6 +74,16 @@ export async function markJobError(id: string, msg: string): Promise<void> {
   await supabaseAdmin().from("jobs").update({ status: "error", error: msg.slice(0, 300) }).eq("id", id);
 }
 
+/** Housekeeping: drop finished jobs older than a day. */
+export async function purgeOldJobs(): Promise<void> {
+  const cutoff = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
+  await supabaseAdmin()
+    .from("jobs")
+    .delete()
+    .in("status", ["done", "error"])
+    .lt("created_at", cutoff);
+}
+
 /** Fire the worker endpoint (returns immediately; it processes in the background). */
 export async function triggerWorker(): Promise<void> {
   const base = (process.env.APP_BASE_URL || "").replace(/\/$/, "");
