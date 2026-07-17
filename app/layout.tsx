@@ -1,6 +1,7 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Tajawal } from "next/font/google";
 import "./globals.css";
+import { RegisterSW } from "./SW";
 
 const tajawal = Tajawal({
   subsets: ["arabic"],
@@ -9,8 +10,20 @@ const tajawal = Tajawal({
 });
 
 export const metadata: Metadata = {
-  title: "كتاب الوصفات",
+  title: "كتاب وصفات أمير",
   description: "وصفاتي المحفوظة من انستغرام وفيسبوك",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    title: "كتاب وصفات أمير",
+    statusBarStyle: "default",
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#d9613b",
+  width: "device-width",
+  initialScale: 1,
 };
 
 export default function RootLayout({
@@ -20,7 +33,14 @@ export default function RootLayout({
 }) {
   return (
     <html lang="ar" dir="rtl">
-      <body className={tajawal.className}>{children}</body>
+      <head>
+        {/* Applies saved/system theme before paint to avoid a flash. */}
+        <script src="/theme-init.js" />
+      </head>
+      <body className={tajawal.className}>
+        {children}
+        <RegisterSW />
+      </body>
     </html>
   );
 }

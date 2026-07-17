@@ -1,6 +1,11 @@
 import { randomUUID } from "crypto";
 import { supabaseAdmin } from "./supabase";
-import { extractRecipe, extractRecipeFromVideo } from "./gemini";
+import {
+  extractRecipe,
+  extractRecipeFromVideo,
+  extractRecipeFromYouTube,
+} from "./gemini";
+import type { ExtractedRecipe } from "./types";
 import {
   sendMessage,
   escapeHtml,
@@ -34,7 +39,7 @@ export function detectPlatform(url: string): string {
 
 // Platforms whose recipe may live only in the video — worth transcribing.
 const VIDEO_PLATFORMS = new Set(["instagram", "facebook", "tiktok", "youtube"]);
-const VIDEO_MAX = 20 * 1024 * 1024;
+const VIDEO_MAX = 35 * 1024 * 1024;
 
 /** Ask the resolver microservice to turn a page URL into a direct video URL. */
 async function resolveVideoUrl(
@@ -205,47 +210,81 @@ async function persistImage(
   }
 }
 
+export interface SaveResult {
+  id: string;
+  status: "ok" | "needs_review" | "fetch_failed";
+  title: string;
+  viaVideo: boolean;
+  updated: boolean;
+  duplicate: boolean;
+}
+
 /**
- * Full pipeline for one shared URL: fetch meta -> extract recipe -> persist
- * image -> insert row -> reply to the user in Arabic.
+ * Core save pipeline shared by Telegram, the web share target, and retry.
+ * Dedupes by source_url: an already-complete recipe is returned untouched;
+ * an incomplete one (needs_review/fetch_failed) is re-processed in place.
  */
-export async function processShare(url: string, chatId: number): Promise<void> {
+export async function saveFromUrl(url: string): Promise<SaveResult> {
   const sb = supabaseAdmin();
-  const id = randomUUID();
   const platform = detectPlatform(url);
 
-  const meta = await fetchMeta(url);
+  const { data: existing } = await sb
+    .from("recipes")
+    .select("id, image_url, status, title, ingredients, steps")
+    .eq("source_url", url)
+    .maybeSingle();
 
-  // Clean FB/IG title ("views · reactions | caption | author") and lift author.
+  // Already have a good version — don't clobber it (protects manual edits).
+  if (
+    existing &&
+    existing.status === "ok" &&
+    ((existing.ingredients?.length ?? 0) > 0 || (existing.steps?.length ?? 0) > 0)
+  ) {
+    return {
+      id: existing.id,
+      status: "ok",
+      title: existing.title || "وصفة",
+      viaVideo: false,
+      updated: false,
+      duplicate: true,
+    };
+  }
+
+  const id = existing?.id || randomUUID();
+
+  const meta = await fetchMeta(url);
   const cleaned = cleanSocialTitle(meta.title);
   if (cleaned.title) meta.title = cleaned.title;
   if (!meta.author && cleaned.author) meta.author = cleaned.author;
 
-  let [extracted, image_url] = await Promise.all([
+  const [captionExtract, freshImage] = await Promise.all([
     extractRecipe({ title: meta.title, caption: meta.caption }),
     persistImage(sb, id, meta.image),
   ]);
+  let extracted: ExtractedRecipe | null = captionExtract;
+  const image_url = freshImage || existing?.image_url || null;
 
-  // If the caption had no real recipe (common: the recipe is only spoken in the
-  // reel), resolve the video via the resolver service and transcribe it.
   const captionHasRecipe =
     extracted?.is_recipe &&
     ((extracted.ingredients?.length ?? 0) > 0 || (extracted.steps?.length ?? 0) > 0);
   let viaVideo = false;
   if (!captionHasRecipe && VIDEO_PLATFORMS.has(platform)) {
-    const resolved = await resolveVideoUrl(url);
-    if (resolved?.video_url) {
-      const vbuf = await fetchVideoBuffer(resolved.video_url);
-      if (vbuf) {
-        const fromVideo = await extractRecipeFromVideo(vbuf, "video/mp4", meta.caption);
-        if (
-          fromVideo?.is_recipe &&
-          ((fromVideo.ingredients?.length ?? 0) > 0 || (fromVideo.steps?.length ?? 0) > 0)
-        ) {
-          extracted = fromVideo;
-          viaVideo = true;
-        }
+    let fromVideo: ExtractedRecipe | null = null;
+    if (platform === "youtube") {
+      fromVideo = await extractRecipeFromYouTube(url, meta.caption);
+    } else {
+      const resolved = await resolveVideoUrl(url);
+      if (resolved?.video_url) {
+        const vbuf = await fetchVideoBuffer(resolved.video_url);
+        if (vbuf) fromVideo = await extractRecipeFromVideo(vbuf, "video/mp4", meta.caption);
       }
+    }
+    if (
+      fromVideo?.is_recipe &&
+      ((fromVideo.ingredients?.length ?? 0) > 0 || (fromVideo.steps?.length ?? 0) > 0)
+    ) {
+      extracted = fromVideo;
+      viaVideo = true;
     }
   }
 
@@ -254,15 +293,12 @@ export async function processShare(url: string, chatId: number): Promise<void> {
   const title =
     (extracted?.is_recipe && extracted.title) || meta.title || "وصفة بدون عنوان";
 
-  let status: "ok" | "needs_review" | "fetch_failed" = "ok";
-  if (!meta.image && !meta.caption && !meta.title) {
-    status = "fetch_failed";
-  } else if (!extracted?.is_recipe || (ingredients.length === 0 && steps.length === 0)) {
+  let status: SaveResult["status"] = "ok";
+  if (!meta.image && !meta.caption && !meta.title) status = "fetch_failed";
+  else if (!extracted?.is_recipe || (ingredients.length === 0 && steps.length === 0))
     status = "needs_review";
-  }
 
-  const { error } = await sb.from("recipes").insert({
-    id,
+  const row = {
     source_url: url,
     platform,
     author: meta.author ?? null,
@@ -277,24 +313,45 @@ export async function processShare(url: string, chatId: number): Promise<void> {
     status,
     raw: { ...meta, via_video: viaVideo },
     lang: "ar",
-  });
+  };
 
+  const { error } = existing
+    ? await sb.from("recipes").update(row).eq("id", id)
+    : await sb.from("recipes").insert({ id, ...row });
   if (error) {
-    console.error("insert failed", error);
+    console.error("saveFromUrl db error", error);
+    throw new Error(error.message);
+  }
+
+  return { id, status, title, viaVideo, updated: Boolean(existing), duplicate: false };
+}
+
+/** Telegram entry point: save a shared link and reply in Arabic. */
+export async function processShare(url: string, chatId: number): Promise<void> {
+  let r: SaveResult;
+  try {
+    r = await saveFromUrl(url);
+  } catch {
     await sendMessage(chatId, "⚠️ حدث خطأ أثناء حفظ الوصفة في قاعدة البيانات.");
     return;
   }
 
   const base = (process.env.APP_BASE_URL || "").replace(/\/$/, "");
-  const link = base ? `\n${base}/recipe/${id}` : "";
+  const link = base ? `\n${base}/recipe/${r.id}` : "";
 
-  if (status === "ok") {
-    const tag = viaVideo ? " 🎬 (من الفيديو)" : "";
-    await sendMessage(chatId, `✅ تم حفظ الوصفة: <b>${escapeHtml(title)}</b>${tag}${link}`);
-  } else if (status === "needs_review") {
+  if (r.duplicate) {
     await sendMessage(
       chatId,
-      `⚠️ حفظت الرابط والصورة، لكن لم أتمكن من قراءة الوصفة بوضوح (قد تكون في الفيديو). أضفتها لقائمة المراجعة.${link}`
+      `ℹ️ هذه الوصفة محفوظة عندك مسبقًا: <b>${escapeHtml(r.title)}</b>${link}`
+    );
+  } else if (r.status === "ok") {
+    const tag = r.viaVideo ? " 🎬 (من الفيديو)" : "";
+    const verb = r.updated ? "تم تحديث" : "تم حفظ";
+    await sendMessage(chatId, `✅ ${verb} الوصفة: <b>${escapeHtml(r.title)}</b>${tag}${link}`);
+  } else if (r.status === "needs_review") {
+    await sendMessage(
+      chatId,
+      `⚠️ حفظت الرابط والصورة، لكن لم أتمكن من قراءة الوصفة بوضوح. أضفتها لقائمة المراجعة.${link}`
     );
   } else {
     await sendMessage(

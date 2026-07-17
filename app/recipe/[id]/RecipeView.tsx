@@ -4,8 +4,16 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { Recipe } from "@/lib/types";
-import { getEditKey, hasEditKey, getChecked, setChecked } from "@/lib/client";
+import {
+  getEditKey,
+  hasEditKey,
+  getChecked,
+  setChecked,
+  addToShopping,
+} from "@/lib/client";
 import { UnlockButton } from "@/app/Unlock";
+import { CartLink } from "@/app/CartLink";
+import { ThemeToggle } from "@/app/ThemeToggle";
 
 const PLATFORM_LABEL: Record<string, string> = {
   instagram: "انستغرام",
@@ -24,6 +32,7 @@ export default function RecipeView({ recipe }: { recipe: Recipe }) {
   const [checked, setCheckedState] = useState<number[]>([]);
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [added, setAdded] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -72,6 +81,8 @@ export default function RecipeView({ recipe }: { recipe: Recipe }) {
               ✏️ تعديل
             </button>
           )}
+          <ThemeToggle />
+          <CartLink />
           <UnlockButton />
         </div>
       </div>
@@ -135,12 +146,46 @@ export default function RecipeView({ recipe }: { recipe: Recipe }) {
           </div>
 
           <div className="recipe-actions no-print">
+            {ingredients.length > 0 && (
+              <button
+                className="btn-ghost"
+                onClick={() => {
+                  addToShopping(r.id, r.title || "وصفة", ingredients);
+                  setAdded(true);
+                  setTimeout(() => setAdded(false), 1500);
+                }}
+              >
+                {added ? "✓ أضيفت" : "🛒 أضف للتسوق"}
+              </button>
+            )}
             <button className="btn-ghost" onClick={copyRecipe}>
               {copied ? "✓ تم النسخ" : "📋 نسخ"}
             </button>
             <button className="btn-ghost" onClick={() => window.print()}>
               🖨️ طباعة
             </button>
+            {canEdit && r.status !== "ok" && hasSource && (
+              <button
+                className="btn-ghost"
+                disabled={busy}
+                onClick={async () => {
+                  setBusy(true);
+                  const res = await fetch("/api/web-save", {
+                    method: "POST",
+                    headers: {
+                      "content-type": "application/json",
+                      "x-edit-key": getEditKey(),
+                    },
+                    body: JSON.stringify({ url: r.source_url }),
+                  });
+                  setBusy(false);
+                  if (res.ok) window.location.reload();
+                  else alert("تعذّرت إعادة المحاولة.");
+                }}
+              >
+                {busy ? "..." : "🔄 إعادة الاستخراج"}
+              </button>
+            )}
             {hasSource && (
               <a className="btn-primary" href={r.source_url} target="_blank" rel="noopener noreferrer">
                 ▶️ شاهد على {platformLabel}
@@ -151,8 +196,8 @@ export default function RecipeView({ recipe }: { recipe: Recipe }) {
           {r.status !== "ok" && (
             <div className="note">
               {r.status === "needs_review"
-                ? "⚠️ لم نتمكن من قراءة الوصفة بالكامل تلقائيًا. فعّل وضع التحرير لإضافة التفاصيل، أو شاهد المصدر الأصلي."
-                : "⚠️ تعذّر جلب محتوى المنشور. الرابط الأصلي محفوظ بالأسفل."}
+                ? "⚠️ لم أتمكن من استخراج الوصفة تلقائيًا. فعّل وضع التحرير لإضافتها يدويًا، أو اضغط «إعادة الاستخراج»."
+                : "⚠️ تعذّر الوصول إلى هذا المنشور (قد يكون خاصًا أو محذوفًا). الرابط الأصلي محفوظ بالأسفل."}
             </div>
           )}
 

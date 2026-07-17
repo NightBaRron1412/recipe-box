@@ -147,6 +147,15 @@ export async function extractRecipeFromVideo(
   return callGemini([{ text: promptText }, { fileData: { mimeType, fileUri: uri } }]);
 }
 
+/** Extract a recipe from a YouTube URL — Gemini ingests YouTube natively. */
+export async function extractRecipeFromYouTube(
+  url: string,
+  extra?: string
+): Promise<ExtractedRecipe | null> {
+  const promptText = VIDEO_PROMPT + (extra ? `\n\nنص مرفق:\n${extra}` : "");
+  return callGemini([{ text: promptText }, { fileData: { fileUri: url } }]);
+}
+
 function stripFences(s: string): string {
   return s.trim().replace(/^```(?:json)?/i, "").replace(/```$/i, "").trim();
 }

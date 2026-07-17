@@ -15,6 +15,26 @@
   --radius: 16px;
   --shadow: 0 6px 24px rgba(60, 40, 20, 0.08);
   --shadow-lg: 0 14px 40px rgba(60, 40, 20, 0.16);
+  --toolbar-bg: rgba(250, 246, 239, 0.9);
+}
+
+html[data-theme="dark"] {
+  --bg: #17130f;
+  --bg2: #201a15;
+  --card: #241e19;
+  --ink: #efe6da;
+  --muted: #a99a8b;
+  --accent: #e8734d;
+  --accent-dark: #d9613b;
+  --accent-soft: #3a2620;
+  --green: #93c187;
+  --green-soft: #24301f;
+  --line: #382f28;
+  --warn-bg: #3a3016;
+  --warn-ink: #e6c96a;
+  --shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 14px 40px rgba(0, 0, 0, 0.6);
+  --toolbar-bg: rgba(23, 19, 15, 0.9);
 }
 
 * {
@@ -26,11 +46,12 @@ body {
   padding: 0;
 }
 body {
-  background: linear-gradient(180deg, #faf6ef 0%, #f6efe4 100%);
+  background: var(--bg);
   color: var(--ink);
   line-height: 1.75;
   -webkit-font-smoothing: antialiased;
   min-height: 100vh;
+  transition: background 0.2s, color 0.2s;
 }
 a {
   color: inherit;
@@ -126,7 +147,7 @@ textarea {
   position: sticky;
   top: 0;
   z-index: 20;
-  background: rgba(250, 246, 239, 0.9);
+  background: var(--toolbar-bg);
   backdrop-filter: blur(8px);
   padding: 12px 0 10px;
   margin-bottom: 8px;
@@ -613,6 +634,110 @@ textarea {
   }
   .recipe-title {
     font-size: 24px;
+  }
+}
+
+/* ---------- Header actions / cart ---------- */
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.cart-link,
+.theme-toggle {
+  position: relative;
+  border: 1px solid var(--line);
+  background: var(--card);
+  border-radius: 999px;
+  padding: 8px 14px;
+  font-size: 16px;
+  line-height: 1;
+  color: var(--ink);
+}
+.theme-toggle:hover {
+  border-color: var(--accent);
+}
+.cart-badge {
+  position: absolute;
+  top: -6px;
+  inset-inline-start: -6px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 11px;
+  min-width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+}
+.mini-x {
+  border: none;
+  background: none;
+  color: var(--muted);
+  font-size: 13px;
+  padding: 2px 6px;
+  border-radius: 6px;
+}
+.mini-x:hover {
+  background: #fdeceb;
+  color: #b23b2c;
+}
+
+/* ---------- Share page ---------- */
+.share-page {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 80vh;
+}
+.share-card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  box-shadow: var(--shadow-lg);
+  padding: 40px 32px;
+  text-align: center;
+  max-width: 380px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+.share-logo {
+  font-size: 44px;
+}
+.share-card h2 {
+  margin: 4px 0;
+  font-size: 20px;
+}
+.share-card .muted {
+  color: var(--muted);
+  font-size: 14px;
+  margin: 0;
+}
+.share-card input {
+  width: 100%;
+  padding: 11px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.big-ok {
+  font-size: 48px;
+}
+.spinner {
+  width: 42px;
+  height: 42px;
+  border: 4px solid var(--accent-soft);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
   }
 }
 

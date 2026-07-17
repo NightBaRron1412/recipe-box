@@ -4,6 +4,8 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import type { Recipe } from "@/lib/types";
 import { UnlockButton } from "./Unlock";
+import { CartLink } from "./CartLink";
+import { ThemeToggle } from "./ThemeToggle";
 
 const PLATFORM_LABEL: Record<string, string> = {
   instagram: "انستغرام",
@@ -110,11 +112,15 @@ export default function GalleryClient({
         <div className="brand">
           <span className="logo">🍽️</span>
           <div>
-            <h1>كتاب الوصفات</h1>
+            <h1>كتاب وصفات أمير</h1>
             <span className="count">{recipes.length} وصفة</span>
           </div>
         </div>
-        <UnlockButton />
+        <div className="header-actions">
+          <ThemeToggle />
+          <CartLink />
+          <UnlockButton />
+        </div>
       </header>
 
       <div className="toolbar">
