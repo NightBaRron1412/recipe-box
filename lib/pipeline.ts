@@ -106,7 +106,7 @@ async function fetchMedia(url: string, maxBytes: number): Promise<Buffer | null>
  */
 async function transcribeResolved(
   url: string,
-  caption?: string
+  knownTags?: string[]
 ): Promise<ExtractedRecipe | null> {
   const resolved = await resolveVideoUrl(url);
   if (!resolved) return null;
@@ -129,11 +129,7 @@ async function transcribeResolved(
     media = await fetchMedia(resolved.video_url, VIDEO_MAX);
   }
   if (!media) return null;
-
-  // Intentionally NOT passing the caption: reel captions are often teasers
-  // ("ألذ وصفة بدون فرن!") that mislead the model into is_recipe=false.
-  void caption;
-  return extractRecipeFromVideo(media, mime);
+  return extractRecipeFromVideo(media, mime, knownTags);
 }
 
 function decodeEntities(s: string): string {
@@ -259,6 +255,14 @@ async function persistImage(
   }
 }
 
+/** Most-used existing tags, so the model reuses them instead of inventing synonyms. */
+async function getKnownTags(sb: ReturnType<typeof supabaseAdmin>): Promise<string[]> {
+  const { data } = await sb.from("recipes").select("tags").limit(500);
+  const count = new Map<string, number>();
+  for (const r of data || []) for (const t of (r.tags as string[]) || []) count.set(t, (count.get(t) || 0) + 1);
+  return [...count.entries()].sort((a, b) => b[1] - a[1]).slice(0, 60).map(([t]) => t);
+}
+
 export interface SaveResult {
   id: string;
   status: "ok" | "needs_review" | "fetch_failed";
@@ -309,10 +313,11 @@ export async function saveFromUrl(url: string): Promise<SaveResult> {
   // Optimization: reel captions are usually teasers. Only spend a Gemini call on
   // the caption for non-video platforms or genuinely long captions; otherwise go
   // straight to the video/audio (saves a call = faster + avoids quota limits).
+  const knownTags = await getKnownTags(sb);
   const richCaption = (meta.caption || "").length >= 250;
   const doCaption = !VIDEO_PLATFORMS.has(platform) || richCaption;
   const [captionExtract, freshImage] = await Promise.all([
-    doCaption ? extractRecipe({ title: meta.title, caption: meta.caption }) : Promise.resolve(null),
+    doCaption ? extractRecipe({ title: meta.title, caption: meta.caption }, knownTags) : Promise.resolve(null),
     persistImage(sb, id, meta.image),
   ]);
   let extracted: ExtractedRecipe | null = captionExtract;
@@ -325,9 +330,9 @@ export async function saveFromUrl(url: string): Promise<SaveResult> {
   if (!captionHasRecipe && VIDEO_PLATFORMS.has(platform)) {
     let fromVideo: ExtractedRecipe | null = null;
     if (platform === "youtube") {
-      fromVideo = await extractRecipeFromYouTube(url);
+      fromVideo = await extractRecipeFromYouTube(url, knownTags);
     } else {
-      fromVideo = await transcribeResolved(url, meta.caption);
+      fromVideo = await transcribeResolved(url, knownTags);
     }
     if (
       fromVideo?.is_recipe &&
@@ -415,8 +420,9 @@ export async function saveFromImage(
   const sb = supabaseAdmin();
   const id = randomUUID();
 
+  const knownTags = await getKnownTags(sb);
   const [extracted, image_url] = await Promise.all([
-    extractRecipeFromImage(buf, mimeType, opts?.caption),
+    extractRecipeFromImage(buf, mimeType, knownTags, opts?.caption),
     uploadImageBuffer(sb, id, buf, mimeType),
   ]);
 
@@ -516,8 +522,9 @@ export async function processVideo(opts: {
   const buf = await downloadFile(path);
   const mimeType = opts.mimeType || "video/mp4";
 
+  const knownTags = await getKnownTags(sb);
   const [extracted, image_url] = await Promise.all([
-    extractRecipeFromVideo(buf, mimeType, opts.caption),
+    extractRecipeFromVideo(buf, mimeType, knownTags),
     (async () => {
       if (!opts.thumbFileId) return null;
       const t = await getFilePath(opts.thumbFileId);

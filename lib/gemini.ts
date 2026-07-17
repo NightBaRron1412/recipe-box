@@ -57,6 +57,15 @@ const RESPONSE_SCHEMA = {
   required: ["is_recipe", "title", "ingredients", "steps", "tags"],
 };
 
+function tagHint(knownTags?: string[]): string {
+  if (!knownTags || !knownTags.length) return "";
+  return (
+    `\n\nمهم بخصوص الوسوم (tags): لديّ قائمة وسوم مستخدمة سابقًا. أعد استخدام الوسم المناسب منها حرفيًا ` +
+    `بدل إنشاء وسم جديد مرادف (مثال: استخدم "حلويات" ولا تكتب "حلى" أو "حلوى"). ` +
+    `لا تنشئ وسمًا جديدًا إلا إذا لم يوجد أي وسم مناسب في القائمة.\nالقائمة: ${knownTags.join("، ")}`
+  );
+}
+
 async function callGemini(parts: unknown[], attempt = 0): Promise<ExtractedRecipe | null> {
   const key = process.env.GEMINI_API_KEY;
   if (!key) return null;
@@ -94,13 +103,13 @@ async function callGemini(parts: unknown[], attempt = 0): Promise<ExtractedRecip
 }
 
 /** Extract a recipe from post text (title + caption). */
-export async function extractRecipe(input: {
-  title?: string;
-  caption?: string;
-}): Promise<ExtractedRecipe | null> {
+export async function extractRecipe(
+  input: { title?: string; caption?: string },
+  knownTags?: string[]
+): Promise<ExtractedRecipe | null> {
   const source = [input.title, input.caption].filter(Boolean).join("\n\n").trim();
   if (!source) return null;
-  return callGemini([{ text: TEXT_PROMPT + source }]);
+  return callGemini([{ text: TEXT_PROMPT + source + tagHint(knownTags) }]);
 }
 
 // Inline request must stay under Gemini's ~20MB total limit; base64 inflates by
@@ -166,10 +175,10 @@ async function geminiUploadFile(buf: Buffer, mimeType: string): Promise<string |
 export async function extractRecipeFromVideo(
   buf: Buffer,
   mimeType: string,
-  extra?: string
+  knownTags?: string[]
 ): Promise<ExtractedRecipe | null> {
   const base = mimeType.startsWith("audio/") ? AUDIO_PROMPT : VIDEO_PROMPT;
-  const promptText = base + (extra ? `\n\nنص مرفق:\n${extra}` : "");
+  const promptText = base + tagHint(knownTags);
   if (buf.length <= INLINE_MAX) {
     return callGemini([
       { text: promptText },
@@ -191,9 +200,10 @@ ${SCHEMA_HINT}`;
 export async function extractRecipeFromImage(
   buf: Buffer,
   mimeType: string,
+  knownTags?: string[],
   extra?: string
 ): Promise<ExtractedRecipe | null> {
-  const promptText = IMAGE_PROMPT + (extra ? `\n\nنص مرفق:\n${extra}` : "");
+  const promptText = IMAGE_PROMPT + (extra ? `\n\nنص مرفق:\n${extra}` : "") + tagHint(knownTags);
   return callGemini([
     { text: promptText },
     { inlineData: { mimeType, data: buf.toString("base64") } },
@@ -203,10 +213,61 @@ export async function extractRecipeFromImage(
 /** Extract a recipe from a YouTube URL — Gemini ingests YouTube natively. */
 export async function extractRecipeFromYouTube(
   url: string,
-  extra?: string
+  knownTags?: string[]
 ): Promise<ExtractedRecipe | null> {
-  const promptText = VIDEO_PROMPT + (extra ? `\n\nنص مرفق:\n${extra}` : "");
-  return callGemini([{ text: promptText }, { fileData: { fileUri: url } }]);
+  return callGemini([
+    { text: VIDEO_PROMPT + tagHint(knownTags) },
+    { fileData: { fileUri: url } },
+  ]);
+}
+
+/** Ask the model to merge synonymous Arabic tags into a canonical set.
+ * Returns a map of {oldTag: canonicalTag}. */
+export async function consolidateTags(tags: string[]): Promise<Record<string, string>> {
+  const key = process.env.GEMINI_API_KEY;
+  if (!key || !tags.length) return {};
+  const prompt =
+    `هذه قائمة وسوم عربية لوصفات طبخ. وحّدها في مجموعة نظيفة: ادمج المترادفات والأشكال المختلفة ` +
+    `في وسم واحد موحّد (أمثلة: حلى/حلوى/حلويات → حلويات، فراخ/دجاج → دجاج، مقبلات/مقبّلات → مقبلات). ` +
+    `أبقِ الوسوم الجيدة كما هي. لكل وسم في القائمة أعِد الشكل الموحّد المناسب له.\nالقائمة: ${tags.join("، ")}`;
+  const schema = {
+    type: "array",
+    items: {
+      type: "object",
+      properties: { from: { type: "string" }, to: { type: "string" } },
+      required: ["from", "to"],
+    },
+  };
+  try {
+    const res = await fetch(`${BASE}/v1beta/models/${MODEL}:generateContent`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-goog-api-key": key },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 0, responseMimeType: "application/json", responseSchema: schema },
+      }),
+    });
+    if (!res.ok) {
+      console.error("consolidateTags error", res.status, await res.text());
+      return {};
+    }
+    const data = await res.json();
+    const text: string | undefined = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!text) return {};
+    const arr = JSON.parse(stripFences(text));
+    const map: Record<string, string> = {};
+    if (Array.isArray(arr)) {
+      for (const p of arr) {
+        const from = String(p?.from || "").trim();
+        const to = String(p?.to || "").trim();
+        if (from && to) map[from] = to;
+      }
+    }
+    return map;
+  } catch (e) {
+    console.error("consolidateTags failed", e);
+    return {};
+  }
 }
 
 function stripFences(s: string): string {
