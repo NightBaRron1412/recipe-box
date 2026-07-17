@@ -32,6 +32,56 @@ export function detectPlatform(url: string): string {
   return "other";
 }
 
+// Platforms whose recipe may live only in the video — worth transcribing.
+const VIDEO_PLATFORMS = new Set(["instagram", "facebook", "tiktok", "youtube"]);
+const VIDEO_MAX = 20 * 1024 * 1024;
+
+/** Ask the resolver microservice to turn a page URL into a direct video URL. */
+async function resolveVideoUrl(
+  pageUrl: string
+): Promise<{ video_url?: string; title?: string; uploader?: string } | null> {
+  const endpoint = process.env.RESOLVER_URL;
+  if (!endpoint) return null;
+  try {
+    const res = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-internal-secret": process.env.RESOLVER_SECRET || "",
+      },
+      body: JSON.stringify({ url: pageUrl }),
+    });
+    if (!res.ok) return null;
+    const j = await res.json();
+    if (!j?.video_url) {
+      if (j?.error) console.error("resolver error", j.error);
+      return null;
+    }
+    return j;
+  } catch (e) {
+    console.error("resolveVideoUrl failed", e);
+    return null;
+  }
+}
+
+/** Download a resolved video, guarding against oversized files. */
+async function fetchVideoBuffer(url: string): Promise<Buffer | null> {
+  try {
+    const res = await fetch(url, { headers: { "User-Agent": BROWSER_UA } });
+    if (!res.ok) return null;
+    const len = Number(res.headers.get("content-length") || 0);
+    if (len && len > VIDEO_MAX) {
+      console.error("resolved video too large", len);
+      return null;
+    }
+    const buf = Buffer.from(await res.arrayBuffer());
+    return buf.length > VIDEO_MAX ? null : buf;
+  } catch (e) {
+    console.error("fetchVideoBuffer failed", e);
+    return null;
+  }
+}
+
 function decodeEntities(s: string): string {
   return s
     .replace(/&amp;/g, "&")
@@ -171,10 +221,33 @@ export async function processShare(url: string, chatId: number): Promise<void> {
   if (cleaned.title) meta.title = cleaned.title;
   if (!meta.author && cleaned.author) meta.author = cleaned.author;
 
-  const [extracted, image_url] = await Promise.all([
+  let [extracted, image_url] = await Promise.all([
     extractRecipe({ title: meta.title, caption: meta.caption }),
     persistImage(sb, id, meta.image),
   ]);
+
+  // If the caption had no real recipe (common: the recipe is only spoken in the
+  // reel), resolve the video via the resolver service and transcribe it.
+  const captionHasRecipe =
+    extracted?.is_recipe &&
+    ((extracted.ingredients?.length ?? 0) > 0 || (extracted.steps?.length ?? 0) > 0);
+  let viaVideo = false;
+  if (!captionHasRecipe && VIDEO_PLATFORMS.has(platform)) {
+    const resolved = await resolveVideoUrl(url);
+    if (resolved?.video_url) {
+      const vbuf = await fetchVideoBuffer(resolved.video_url);
+      if (vbuf) {
+        const fromVideo = await extractRecipeFromVideo(vbuf, "video/mp4", meta.caption);
+        if (
+          fromVideo?.is_recipe &&
+          ((fromVideo.ingredients?.length ?? 0) > 0 || (fromVideo.steps?.length ?? 0) > 0)
+        ) {
+          extracted = fromVideo;
+          viaVideo = true;
+        }
+      }
+    }
+  }
 
   const ingredients = extracted?.ingredients ?? [];
   const steps = extracted?.steps ?? [];
@@ -202,7 +275,7 @@ export async function processShare(url: string, chatId: number): Promise<void> {
     servings: extracted?.servings ?? null,
     time_minutes: extracted?.time_minutes ?? null,
     status,
-    raw: meta,
+    raw: { ...meta, via_video: viaVideo },
     lang: "ar",
   });
 
@@ -216,7 +289,8 @@ export async function processShare(url: string, chatId: number): Promise<void> {
   const link = base ? `\n${base}/recipe/${id}` : "";
 
   if (status === "ok") {
-    await sendMessage(chatId, `✅ تم حفظ الوصفة: <b>${escapeHtml(title)}</b>${link}`);
+    const tag = viaVideo ? " 🎬 (من الفيديو)" : "";
+    await sendMessage(chatId, `✅ تم حفظ الوصفة: <b>${escapeHtml(title)}</b>${tag}${link}`);
   } else if (status === "needs_review") {
     await sendMessage(
       chatId,
