@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { waitUntil } from "@vercel/functions";
-import { extractUrl, processShare } from "@/lib/pipeline";
+import { extractUrl, processShare, processVideo } from "@/lib/pipeline";
 import { sendMessage } from "@/lib/telegram";
 
 export const runtime = "nodejs";
@@ -34,8 +34,42 @@ export async function POST(req: NextRequest) {
     await sendMessage(
       chatId,
       `أهلاً بك في <b>كتاب الوصفات</b> 🍽️\n\n` +
-        `أرسل لي رابط وصفة من انستغرام أو فيسبوك أو تيك توك وسأحفظها لك تلقائيًا مع الصورة والمكونات والخطوات.\n\n` +
+        `• أرسل <b>رابط</b> وصفة من انستغرام أو فيسبوك أو تيك توك — أحفظها مع الصورة والمكونات والخطوات.\n` +
+        `• إذا كانت الوصفة مشروحة داخل الفيديو فقط، أرسل <b>الفيديو نفسه</b> وسأستمع إليه وأستخرج الوصفة.\n\n` +
         `معرفك في تيليجرام: <code>${fromId}</code>`
+    );
+    return NextResponse.json({ ok: true });
+  }
+
+  // 4) Video sent directly (reel whose recipe is only spoken) -> transcribe.
+  const video =
+    msg?.video ||
+    (msg?.document && /^video\//.test(msg.document.mime_type || "")
+      ? msg.document
+      : null) ||
+    msg?.animation;
+  if (video?.file_id) {
+    const thumbFileId =
+      msg?.video?.thumbnail?.file_id ||
+      msg?.video?.thumb?.file_id ||
+      video?.thumbnail?.file_id ||
+      video?.thumb?.file_id;
+    await sendMessage(
+      chatId,
+      "⏳ جاري تحليل الفيديو واستخراج الوصفة... قد يستغرق حتى دقيقة."
+    );
+    waitUntil(
+      processVideo({
+        fileId: video.file_id,
+        thumbFileId,
+        mimeType: video.mime_type,
+        chatId,
+        caption: msg?.caption,
+        sizeHint: video.file_size,
+      }).catch(async (e) => {
+        console.error("processVideo failed", e);
+        await sendMessage(chatId, "⚠️ حدث خطأ غير متوقع أثناء تحليل الفيديو.");
+      })
     );
     return NextResponse.json({ ok: true });
   }
