@@ -41,6 +41,22 @@ const AUDIO_PROMPT = `هذا مقطع صوتي لوصفة طبخ (صوت من ف
 
 ${SCHEMA_HINT}`;
 
+// Forcing the response shape stops the model from occasionally returning a bare
+// array / wrong shape (which silently became is_recipe=false -> needs_review).
+const RESPONSE_SCHEMA = {
+  type: "object",
+  properties: {
+    is_recipe: { type: "boolean" },
+    title: { type: "string" },
+    ingredients: { type: "array", items: { type: "string" } },
+    steps: { type: "array", items: { type: "string" } },
+    tags: { type: "array", items: { type: "string" } },
+    servings: { type: "string", nullable: true },
+    time_minutes: { type: "integer", nullable: true },
+  },
+  required: ["is_recipe", "title", "ingredients", "steps", "tags"],
+};
+
 async function callGemini(parts: unknown[], attempt = 0): Promise<ExtractedRecipe | null> {
   const key = process.env.GEMINI_API_KEY;
   if (!key) return null;
@@ -50,7 +66,11 @@ async function callGemini(parts: unknown[], attempt = 0): Promise<ExtractedRecip
       headers: { "Content-Type": "application/json", "x-goog-api-key": key },
       body: JSON.stringify({
         contents: [{ parts }],
-        generationConfig: { temperature: 0.2, responseMimeType: "application/json" },
+        generationConfig: {
+          temperature: 0.2,
+          responseMimeType: "application/json",
+          responseSchema: RESPONSE_SCHEMA,
+        },
       }),
     });
     // Per-minute rate limit — wait once and retry (within the function budget).
@@ -194,6 +214,7 @@ function stripFences(s: string): string {
 }
 
 function normalize(p: any): ExtractedRecipe {
+  if (Array.isArray(p)) p = p[0] || {}; // guard against array-wrapped output
   const arr = (v: any): string[] =>
     Array.isArray(v) ? v.map((x) => String(x).trim()).filter(Boolean) : [];
   return {
