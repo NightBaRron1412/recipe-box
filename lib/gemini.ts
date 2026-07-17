@@ -249,6 +249,56 @@ export async function extractRecipeFromYouTube(
   ]);
 }
 
+/** Group an existing flat ingredient list into titled sections (multi-part
+ * recipes only). Returns [] for single-part recipes. Keeps item texts as-is. */
+export async function sectionizeIngredients(
+  title: string,
+  ingredients: string[]
+): Promise<{ title: string; items: string[] }[]> {
+  const key = process.env.GEMINI_API_KEY;
+  if (!key || ingredients.length < 3) return [];
+  const prompt =
+    `لديك قائمة مكونات لوصفة "${title}". إذا كانت الوصفة متعددة الأجزاء (مثل: للعجينة، للحشوة، ` +
+    `للصوص، للتزيين) فقسّم المكونات إلى مجموعات، لكل مجموعة عنوان وقائمة مكوّناتها. ` +
+    `استخدم نفس نصوص المكونات كما هي تمامًا دون حذف أو تعديل، ووزّع جميع المكونات دون ترك أيٍّ منها. ` +
+    `إذا كانت الوصفة جزءًا واحدًا فأعِد مصفوفة فارغة [].\nالمكونات:\n${ingredients.join("\n")}`;
+  const schema = {
+    type: "array",
+    items: {
+      type: "object",
+      properties: {
+        title: { type: "string" },
+        items: { type: "array", items: { type: "string" } },
+      },
+      required: ["title", "items"],
+    },
+  };
+  try {
+    const res = await fetch(`${BASE}/v1beta/models/${MODEL}:generateContent`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-goog-api-key": key },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 0, responseMimeType: "application/json", responseSchema: schema },
+      }),
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!text) return [];
+    const arr = JSON.parse(stripFences(text));
+    if (!Array.isArray(arr)) return [];
+    return arr
+      .map((s: any) => ({
+        title: String(s?.title || "").trim(),
+        items: Array.isArray(s?.items) ? s.items.map((x: any) => String(x).trim()).filter(Boolean) : [],
+      }))
+      .filter((s: any) => s.title && s.items.length);
+  } catch {
+    return [];
+  }
+}
+
 /** Estimate approximate per-serving nutrition from a recipe's ingredients. */
 export async function estimateNutrition(
   title: string,
