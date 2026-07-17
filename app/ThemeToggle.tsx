@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Icon } from "./Icon";
 
 export function ThemeToggle() {
   const [dark, setDark] = useState(false);
@@ -19,8 +20,8 @@ export function ThemeToggle() {
   };
 
   return (
-    <button className="theme-toggle" onClick={toggle} title="الوضع الليلي / النهاري">
-      {dark ? "☀️" : "🌙"}
+    <button className="icon-btn" onClick={toggle} title="الوضع الليلي / النهاري" aria-label="تبديل الوضع">
+      <Icon name={dark ? "sun" : "moon"} />
     </button>
   );
 }

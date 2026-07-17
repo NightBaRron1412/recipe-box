@@ -15,6 +15,7 @@ import { UnlockButton } from "@/app/Unlock";
 import { CartLink } from "@/app/CartLink";
 import { ThemeToggle } from "@/app/ThemeToggle";
 import { scaleIngredient, SCALE_OPTIONS } from "@/lib/scale";
+import { Icon } from "@/app/Icon";
 
 const PLATFORM_LABEL: Record<string, string> = {
   instagram: "انستغرام",
@@ -47,6 +48,11 @@ export default function RecipeView({
     setCanEdit(hasEditKey());
     setCheckedState(getChecked(recipe.id));
   }, [recipe.id]);
+
+  // Keep in sync when the server re-renders (e.g. after retry via router.refresh).
+  useEffect(() => {
+    setR(recipe);
+  }, [recipe]);
 
   // Keep the screen awake while viewing a recipe (handy while cooking).
   useEffect(() => {
@@ -102,20 +108,21 @@ export default function RecipeView({
   return (
     <div className="container recipe-page">
       <div className="recipe-topbar">
-        <Link href="/" className="back">
-          ← كل الوصفات
+        <Link href="/" className="icon-btn" title="كل الوصفات" aria-label="رجوع">
+          <Icon name="back" />
         </Link>
         <div className="topbar-actions">
           <button
-            className={`fav-btn ${r.favorite ? "on" : ""}`}
+            className={`icon-btn ${r.favorite ? "fav-on" : ""}`}
             onClick={toggleFavorite}
             title="المفضلة"
+            aria-label="المفضلة"
           >
-            {r.favorite ? "❤️" : "🤍"}
+            <Icon name={r.favorite ? "heartFilled" : "heart"} />
           </button>
           {canEdit && !editing && (
-            <button className="btn-ghost" onClick={() => setEditing(true)}>
-              ✏️ تعديل
+            <button className="icon-btn" onClick={() => setEditing(true)} title="تعديل" aria-label="تعديل">
+              <Icon name="edit" />
             </button>
           )}
           <ThemeToggle />
@@ -186,7 +193,7 @@ export default function RecipeView({
                 key={c}
                 href={`/?collection=${encodeURIComponent(c)}`}
               >
-                📁 {c}
+                <Icon name="folder" size={13} /> {c}
               </Link>
             ))}
           </div>
@@ -205,14 +212,14 @@ export default function RecipeView({
                   setTimeout(() => setAdded(false), 1500);
                 }}
               >
-                {added ? "✓ أضيفت" : "🛒 أضف للتسوق"}
+                <Icon name="cart" size={17} /> {added ? "أضيفت" : "أضف للتسوق"}
               </button>
             )}
             <button className="btn-ghost" onClick={copyRecipe}>
-              {copied ? "✓ تم النسخ" : "📋 نسخ"}
+              <Icon name={copied ? "check" : "copy"} size={17} /> {copied ? "تم النسخ" : "نسخ"}
             </button>
-            <button className="btn-ghost" onClick={() => window.print()}>
-              🖨️ طباعة
+            <button className="btn-ghost" onClick={() => setTimeout(() => window.print(), 60)}>
+              <Icon name="printer" size={17} /> طباعة
             </button>
             {canEdit && r.status !== "ok" && hasSource && (
               <button
@@ -229,16 +236,16 @@ export default function RecipeView({
                     body: JSON.stringify({ url: r.source_url }),
                   });
                   setBusy(false);
-                  if (res.ok) window.location.reload();
+                  if (res.ok) router.refresh();
                   else alert("تعذّرت إعادة المحاولة.");
                 }}
               >
-                {busy ? "..." : "🔄 إعادة الاستخراج"}
+                <Icon name="refresh" size={17} /> {busy ? "..." : "إعادة الاستخراج"}
               </button>
             )}
             {hasSource && (
               <a className="btn-primary" href={r.source_url} target="_blank" rel="noopener noreferrer">
-                ▶️ شاهد على {platformLabel}
+                <Icon name="external" size={17} /> شاهد على {platformLabel}
               </a>
             )}
           </div>
@@ -254,7 +261,7 @@ export default function RecipeView({
           {ingredients.length > 0 && (
             <div className="section">
               <div className="section-head">
-                <h2>🧂 المكونات</h2>
+                <h2><Icon name="utensils" size={18} /> المكونات</h2>
                 <span className="progress">
                   {checked.length}/{ingredients.length}
                 </span>
@@ -288,7 +295,7 @@ export default function RecipeView({
 
           {steps.length > 0 && (
             <div className="section">
-              <h2>👩‍🍳 طريقة التحضير</h2>
+              <h2><Icon name="hat" size={18} /> طريقة التحضير</h2>
               <ol className="steps">
                 {steps.map((s, i) => (
                   <li key={i}>{s}</li>
@@ -306,7 +313,7 @@ export default function RecipeView({
 
           {related.length > 0 && (
             <div className="section no-print">
-              <h2>🍴 وصفات مشابهة</h2>
+              <h2><Icon name="utensils" size={18} /> وصفات مشابهة</h2>
               <div className="related-grid">
                 {related.map((rec) => (
                   <Link href={`/recipe/${rec.id}`} key={rec.id} className="related-card">
@@ -400,7 +407,7 @@ function EditForm({
           <div className="recipe-hero placeholder-hero">🍲</div>
         )}
         <button className="btn-ghost change-img" onClick={onImage} disabled={busy}>
-          🖼️ تغيير الصورة
+          <Icon name="camera" size={16} /> تغيير الصورة
         </button>
       </div>
 
@@ -444,13 +451,13 @@ function EditForm({
 
       <div className="edit-actions">
         <button className="btn-primary" onClick={save} disabled={busy}>
-          {busy ? "..." : "💾 حفظ"}
+          <Icon name="check" size={17} /> {busy ? "..." : "حفظ"}
         </button>
         <button className="btn-ghost" onClick={onCancel} disabled={busy}>
           إلغاء
         </button>
         <button className="btn-danger" onClick={onDelete} disabled={busy}>
-          🗑️ حذف الوصفة
+          <Icon name="trash" size={17} /> حذف الوصفة
         </button>
       </div>
     </div>

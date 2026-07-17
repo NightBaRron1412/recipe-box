@@ -7,26 +7,17 @@ import type { Recipe } from "@/lib/types";
 import { UnlockButton } from "./Unlock";
 import { CartLink } from "./CartLink";
 import { ThemeToggle } from "./ThemeToggle";
+import { Icon } from "./Icon";
 import { getEditKey, hasEditKey } from "@/lib/client";
 
 const PLATFORM_LABEL: Record<string, string> = {
-  instagram: "انستغرام",
-  facebook: "فيسبوك",
-  tiktok: "تيك توك",
-  youtube: "يوتيوب",
-  video: "فيديو",
-  other: "أخرى",
-};
-const PLATFORM_ICON: Record<string, string> = {
-  instagram: "📸",
-  facebook: "📘",
-  tiktok: "🎵",
-  youtube: "▶️",
-  video: "🎬",
-  other: "🔗",
+  instagram: "انستغرام", facebook: "فيسبوك", tiktok: "تيك توك",
+  youtube: "يوتيوب", video: "فيديو", photo: "صورة", other: "أخرى",
 };
 
 type Sort = "newest" | "oldest" | "fastest" | "az";
+
+const norm = (s?: string | null) => (s || "").trim().toLowerCase();
 
 export default function GalleryClient({
   recipes,
@@ -59,8 +50,7 @@ export default function GalleryClient({
 
   const allTags = useMemo(() => {
     const count = new Map<string, number>();
-    for (const r of recipes)
-      for (const t of r.tags || []) count.set(t, (count.get(t) || 0) + 1);
+    for (const r of recipes) for (const t of r.tags || []) count.set(t, (count.get(t) || 0) + 1);
     return [...count.entries()].sort((a, b) => b[1] - a[1]).map(([t]) => t);
   }, [recipes]);
 
@@ -68,6 +58,16 @@ export default function GalleryClient({
     () => [...new Set(recipes.map((r) => r.platform).filter(Boolean))] as string[],
     [recipes]
   );
+
+  // Titles that appear on more than one recipe -> flag as possible duplicates.
+  const dupTitles = useMemo(() => {
+    const c = new Map<string, number>();
+    for (const r of recipes) {
+      const k = norm(r.title);
+      if (k) c.set(k, (c.get(k) || 0) + 1);
+    }
+    return new Set([...c].filter(([, n]) => n > 1).map(([k]) => k));
+  }, [recipes]);
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -78,32 +78,17 @@ export default function GalleryClient({
       if (status && r.status !== status) return false;
       if (tags.length && !tags.every((t) => (r.tags || []).includes(t))) return false;
       if (needle) {
-        const hay = [
-          r.title,
-          r.caption,
-          r.author,
-          ...(r.tags || []),
-          ...(r.ingredients || []),
-        ]
-          .filter(Boolean)
-          .join(" ")
-          .toLowerCase();
+        const hay = [r.title, r.caption, r.author, ...(r.tags || []), ...(r.ingredients || [])]
+          .filter(Boolean).join(" ").toLowerCase();
         if (!hay.includes(needle)) return false;
       }
       return true;
     });
-
     list = [...list].sort((a, b) => {
-      if (sort === "oldest")
-        return a.created_at.localeCompare(b.created_at);
-      if (sort === "az")
-        return (a.title || "").localeCompare(b.title || "", "ar");
-      if (sort === "fastest") {
-        const av = a.time_minutes ?? Infinity;
-        const bv = b.time_minutes ?? Infinity;
-        return av - bv;
-      }
-      return b.created_at.localeCompare(a.created_at); // newest
+      if (sort === "oldest") return a.created_at.localeCompare(b.created_at);
+      if (sort === "az") return (a.title || "").localeCompare(b.title || "", "ar");
+      if (sort === "fastest") return (a.time_minutes ?? Infinity) - (b.time_minutes ?? Infinity);
+      return b.created_at.localeCompare(a.created_at);
     });
     return list;
   }, [recipes, q, tags, platform, status, sort, onlyFav, collection]);
@@ -112,26 +97,16 @@ export default function GalleryClient({
     setTags((cur) => (cur.includes(t) ? cur.filter((x) => x !== t) : [...cur, t]));
 
   const activeFilters =
-    tags.length +
-    (platform ? 1 : 0) +
-    (status ? 1 : 0) +
-    (q.trim() ? 1 : 0) +
-    (onlyFav ? 1 : 0) +
-    (collection ? 1 : 0);
+    tags.length + (platform ? 1 : 0) + (status ? 1 : 0) + (q.trim() ? 1 : 0) +
+    (onlyFav ? 1 : 0) + (collection ? 1 : 0);
   const clearAll = () => {
-    setQ("");
-    setTags([]);
-    setPlatform("");
-    setStatus("");
-    setCollection("");
-    setOnlyFav(false);
+    setQ(""); setTags([]); setPlatform(""); setStatus(""); setCollection(""); setOnlyFav(false);
   };
 
   const surprise = () => {
     const pool = filtered.length ? filtered : recipes;
     if (!pool.length) return;
-    const i = Math.floor((Date.now() / 7) % pool.length);
-    router.push(`/recipe/${pool[i].id}`);
+    router.push(`/recipe/${pool[Math.floor((Date.now() / 7) % pool.length)].id}`);
   };
 
   const onPhoto = async (file: File) => {
@@ -142,16 +117,17 @@ export default function GalleryClient({
     setUploading(true);
     const fd = new FormData();
     fd.append("file", file);
-    const res = await fetch("/api/photo-save", {
-      method: "POST",
-      headers: { "x-edit-key": getEditKey() },
-      body: fd,
-    });
-    setUploading(false);
-    if (res.ok) {
-      const r = await res.json();
-      router.push(`/recipe/${r.id}`);
-    } else alert("تعذّرت قراءة الصورة.");
+    try {
+      const res = await fetch("/api/photo-save", {
+        method: "POST", headers: { "x-edit-key": getEditKey() }, body: fd,
+      });
+      if (res.ok) {
+        const r = await res.json();
+        router.push(`/recipe/${r.id}`);
+      } else alert("تعذّرت قراءة الصورة.");
+    } finally {
+      setUploading(false);
+    }
   };
 
   const reviewCount = recipes.filter((r) => r.status === "needs_review").length;
@@ -159,35 +135,34 @@ export default function GalleryClient({
 
   return (
     <div className="container">
-      <header className="site-header">
+      <header className="topbar">
         <div className="brand">
-          <span className="logo">🍽️</span>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo.svg" alt="" className="brand-logo" width={40} height={40} />
           <div>
             <h1>كتاب وصفات أمير</h1>
             <span className="count">{recipes.length} وصفة</span>
           </div>
         </div>
         <div className="header-actions">
-          <button className="icon-btn" onClick={surprise} title="فاجئني بوصفة">
-            🎲
+          <button className="icon-btn" onClick={surprise} title="فاجئني بوصفة" aria-label="وصفة عشوائية">
+            <Icon name="dice" />
           </button>
           <button
             className="icon-btn"
             onClick={() => photoRef.current?.click()}
             title="أضف وصفة من صورة"
+            aria-label="إضافة من صورة"
             disabled={uploading}
           >
-            {uploading ? "…" : "📷"}
+            <Icon name="camera" />
           </button>
           <ThemeToggle />
           <CartLink />
           <UnlockButton />
         </div>
         <input
-          ref={photoRef}
-          type="file"
-          accept="image/*"
-          hidden
+          ref={photoRef} type="file" accept="image/*" hidden
           onChange={(e) => {
             const f = e.target.files?.[0];
             if (f) onPhoto(f);
@@ -198,69 +173,48 @@ export default function GalleryClient({
 
       <div className="toolbar">
         <div className="search">
-          <span className="search-icon">🔍</span>
+          <span className="search-icon"><Icon name="search" size={18} /></span>
           <input
-            type="text"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="ابحث بالاسم، الوسم، أو المكوّن..."
-            autoComplete="off"
+            type="text" value={q} onChange={(e) => setQ(e.target.value)}
+            placeholder="ابحث بالاسم، الوسم، أو المكوّن..." autoComplete="off"
           />
           {q && (
             <button className="search-clear" onClick={() => setQ("")} aria-label="مسح">
-              ✕
+              <Icon name="x" size={16} />
             </button>
           )}
         </div>
 
         <div className="filters-row">
-          <button
-            className={`fav-filter ${onlyFav ? "active" : ""}`}
-            onClick={() => setOnlyFav((f) => !f)}
-          >
-            {onlyFav ? "❤️" : "🤍"} المفضلة
+          <button className={`chip-toggle ${onlyFav ? "active" : ""}`} onClick={() => setOnlyFav((f) => !f)}>
+            <Icon name={onlyFav ? "heartFilled" : "heart"} size={16} /> المفضلة
           </button>
-
           {collections.length > 0 && (
             <select value={collection} onChange={(e) => setCollection(e.target.value)}>
               <option value="">كل المجموعات</option>
-              {collections.map((c) => (
-                <option key={c} value={c}>
-                  📁 {c}
-                </option>
-              ))}
+              {collections.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
           )}
-
+          {platforms.length > 1 && (
+            <select value={platform} onChange={(e) => setPlatform(e.target.value)}>
+              <option value="">كل المصادر</option>
+              {platforms.map((p) => <option key={p} value={p}>{PLATFORM_LABEL[p] || p}</option>)}
+            </select>
+          )}
+          <select value={status} onChange={(e) => setStatus(e.target.value)}>
+            <option value="">كل الحالات</option>
+            <option value="ok">مكتملة</option>
+            <option value="needs_review">بحاجة لمراجعة{reviewCount ? ` (${reviewCount})` : ""}</option>
+          </select>
           <select value={sort} onChange={(e) => setSort(e.target.value as Sort)}>
             <option value="newest">الأحدث</option>
             <option value="oldest">الأقدم</option>
             <option value="fastest">الأسرع تحضيرًا</option>
             <option value="az">أبجدي</option>
           </select>
-
-          {platforms.length > 1 && (
-            <select value={platform} onChange={(e) => setPlatform(e.target.value)}>
-              <option value="">كل المصادر</option>
-              {platforms.map((p) => (
-                <option key={p} value={p}>
-                  {PLATFORM_ICON[p] || "🔗"} {PLATFORM_LABEL[p] || p}
-                </option>
-              ))}
-            </select>
-          )}
-
-          <select value={status} onChange={(e) => setStatus(e.target.value)}>
-            <option value="">كل الحالات</option>
-            <option value="ok">مكتملة</option>
-            <option value="needs_review">
-              بحاجة لمراجعة{reviewCount ? ` (${reviewCount})` : ""}
-            </option>
-          </select>
-
           {activeFilters > 0 && (
-            <button className="clear-btn" onClick={clearAll}>
-              مسح الفلاتر ({activeFilters}) ✕
+            <button className="chip-toggle clear" onClick={clearAll}>
+              <Icon name="x" size={15} /> مسح ({activeFilters})
             </button>
           )}
         </div>
@@ -268,19 +222,12 @@ export default function GalleryClient({
         {allTags.length > 0 && (
           <div className="tag-cloud">
             {visibleTags.map((t) => (
-              <button
-                key={t}
-                className={`tag-pill ${tags.includes(t) ? "active" : ""}`}
-                onClick={() => toggleTag(t)}
-              >
+              <button key={t} className={`tag-pill ${tags.includes(t) ? "active" : ""}`} onClick={() => toggleTag(t)}>
                 {t}
               </button>
             ))}
             {allTags.length > 12 && (
-              <button
-                className="tag-pill more"
-                onClick={() => setShowAllTags((s) => !s)}
-              >
+              <button className="tag-pill more" onClick={() => setShowAllTags((s) => !s)}>
                 {showAllTags ? "أقل −" : `المزيد +${allTags.length - 12}`}
               </button>
             )}
@@ -288,22 +235,15 @@ export default function GalleryClient({
         )}
       </div>
 
-      <div className="results-meta">
-        {filtered.length} من {recipes.length} وصفة
-      </div>
+      <div className="results-meta">{filtered.length} من {recipes.length} وصفة</div>
 
       {filtered.length === 0 ? (
         <div className="empty">
-          <div className="big">🥘</div>
+          <div className="big"><Icon name="utensils" size={48} /></div>
           {recipes.length === 0 ? (
             <p>لا توجد وصفات بعد. أرسل رابط وصفة إلى بوت تيليجرام لتظهر هنا.</p>
           ) : (
-            <p>
-              لا نتائج مطابقة.{" "}
-              <button className="link-btn" onClick={clearAll}>
-                مسح الفلاتر
-              </button>
-            </p>
+            <p>لا نتائج مطابقة. <button className="link-btn" onClick={clearAll}>مسح الفلاتر</button></p>
           )}
         </div>
       ) : (
@@ -313,39 +253,23 @@ export default function GalleryClient({
               <div className="card-thumb-wrap">
                 {r.image_url ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={r.image_url}
-                    alt={r.title || "وصفة"}
-                    className="card-thumb"
-                    loading="lazy"
-                  />
+                  <img src={r.image_url} alt={r.title || "وصفة"} className="card-thumb" loading="lazy" />
                 ) : (
-                  <div className="card-thumb placeholder">🍲</div>
+                  <div className="card-thumb placeholder"><Icon name="hat" size={40} /></div>
                 )}
-                {r.platform && (
-                  <span className="platform-badge">
-                    {PLATFORM_ICON[r.platform] || "🔗"}
-                  </span>
-                )}
-                {r.status === "needs_review" && (
-                  <span className="review-badge">بحاجة لمراجعة</span>
-                )}
-                {r.favorite && <span className="fav-badge">❤️</span>}
+                <div className="badges-top">
+                  {r.status === "needs_review" && <span className="review-badge">بحاجة لمراجعة</span>}
+                  {dupTitles.has(norm(r.title)) && <span className="dup-badge">مكرر؟</span>}
+                </div>
+                {r.favorite && <span className="fav-badge"><Icon name="heartFilled" size={16} /></span>}
               </div>
               <div className="card-body">
                 <h3 className="card-title">{r.title || "وصفة بدون عنوان"}</h3>
                 <div className="card-meta">
                   {r.time_minutes ? (
-                    <span className="chip time">⏱ {r.time_minutes} د</span>
+                    <span className="chip time"><Icon name="clock" size={13} /> {r.time_minutes} د</span>
                   ) : null}
-                  {(r.ingredients?.length ?? 0) > 0 && (
-                    <span className="chip soft">🧂 {r.ingredients.length}</span>
-                  )}
-                  {(r.tags || []).slice(0, 2).map((t) => (
-                    <span className="chip" key={t}>
-                      {t}
-                    </span>
-                  ))}
+                  {(r.tags || []).slice(0, 2).map((t) => <span className="chip" key={t}>{t}</span>)}
                 </div>
               </div>
             </Link>

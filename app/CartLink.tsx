@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { shoppingCount } from "@/lib/client";
+import { Icon } from "./Icon";
 
 export function CartLink() {
   const [n, setN] = useState(0);
@@ -17,8 +18,9 @@ export function CartLink() {
     };
   }, []);
   return (
-    <Link href="/shopping" className="cart-link" title="قائمة التسوق">
-      🛒{n > 0 && <span className="cart-badge">{n}</span>}
+    <Link href="/shopping" className="icon-btn cart-link" title="قائمة التسوق" aria-label="قائمة التسوق">
+      <Icon name="cart" />
+      {n > 0 && <span className="cart-badge">{n}</span>}
     </Link>
   );
 }

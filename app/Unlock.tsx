@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { getEditKey, setEditKey } from "@/lib/client";
+import { Icon } from "./Icon";
 
 export function UnlockButton() {
   const [open, setOpen] = useState(false);
@@ -27,11 +28,12 @@ export function UnlockButton() {
   return (
     <div className="unlock">
       <button
-        className={`unlock-btn ${unlocked ? "on" : ""}`}
+        className={`icon-btn ${unlocked ? "on" : ""}`}
         onClick={() => setOpen((o) => !o)}
         title={unlocked ? "وضع التحرير مفعّل" : "تفعيل وضع التحرير"}
+        aria-label="وضع التحرير"
       >
-        {unlocked ? "🔓 محرِّر" : "🔒"}
+        <Icon name={unlocked ? "unlock" : "lock"} />
       </button>
       {open && (
         <div className="unlock-pop">

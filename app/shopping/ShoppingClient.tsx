@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { getShopping, setShopping, type ShopItem } from "@/lib/client";
+import { Icon } from "@/app/Icon";
 
 export default function ShoppingClient() {
   const [items, setItems] = useState<ShopItem[]>([]);
@@ -40,9 +41,9 @@ export default function ShoppingClient() {
 
   return (
     <div className="container">
-      <header className="site-header">
+      <header className="topbar">
         <div className="brand">
-          <span className="logo">🛒</span>
+          <span className="brand-logo cart-logo"><Icon name="cart" size={22} /></span>
           <div>
             <h1>قائمة التسوق</h1>
             <span className="count">
@@ -51,13 +52,13 @@ export default function ShoppingClient() {
           </div>
         </div>
         <Link href="/" className="btn-ghost">
-          ← المعرض
+          <Icon name="back" size={16} /> المعرض
         </Link>
       </header>
 
       {items.length === 0 ? (
         <div className="empty">
-          <div className="big">🛒</div>
+          <div className="big"><Icon name="cart" size={48} /></div>
           <p>
             القائمة فارغة. افتح أي وصفة واضغط «أضف للتسوق» لإضافة مكوّناتها هنا.
           </p>
@@ -66,7 +67,7 @@ export default function ShoppingClient() {
         <>
           <div className="recipe-actions no-print">
             <button className="btn-ghost" onClick={copyList}>
-              📋 نسخ القائمة
+              <Icon name="copy" size={16} /> نسخ القائمة
             </button>
             <button className="btn-ghost" onClick={clearChecked} disabled={!doneCount}>
               مسح المكتمل
@@ -78,7 +79,7 @@ export default function ShoppingClient() {
 
           {groups.map((g) => (
             <div className="section" key={g.title + g.entries[0].i}>
-              <h2>🍽️ {g.title}</h2>
+              <h2><Icon name="hat" size={17} /> {g.title}</h2>
               <ul className="ingredients">
                 {g.entries.map(({ it, i }) => (
                   <li key={i} className={it.checked ? "done" : ""}>
@@ -89,7 +90,7 @@ export default function ShoppingClient() {
                       {it.text}
                     </span>
                     <button className="mini-x" onClick={() => remove(i)} aria-label="حذف">
-                      ✕
+                      <Icon name="x" size={14} />
                     </button>
                   </li>
                 ))}
