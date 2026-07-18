@@ -57,6 +57,23 @@ export function UnlockButton() {
               >
                 تنظيف الوسوم
               </button>
+              <button
+                className="btn-ghost"
+                style={{ marginTop: 8 }}
+                onClick={async () => {
+                  toast("جاري تقسيم المكونات...");
+                  const res = await fetch("/api/sections", {
+                    method: "POST",
+                    headers: { "x-edit-key": getEditKey() },
+                  }).catch(() => null);
+                  if (res && res.ok) {
+                    const j = await res.json();
+                    toast(`تم تقسيم ${j.updated} وصفة.`, "success");
+                  } else toast("انتهت الدفعة — أعد الضغط للمزيد.", "info");
+                }}
+              >
+                تقسيم المكونات
+              </button>
               <button className="btn-danger" onClick={lock} style={{ marginTop: 8 }}>
                 إيقاف التحرير
               </button>
