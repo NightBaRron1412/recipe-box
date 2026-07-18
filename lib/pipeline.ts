@@ -129,6 +129,25 @@ interface Resolved {
   uploader?: string;
 }
 
+/** Alert the owner (once per 6h) that Instagram cookies likely expired. */
+async function maybeAlertIgCookies(): Promise<void> {
+  const chat = process.env.ALLOWED_TELEGRAM_USER_ID;
+  if (!chat) return;
+  try {
+    const sb = supabaseAdmin();
+    const { data } = await sb.from("app_kv").select("ts").eq("key", "ig_cookie_alert").maybeSingle();
+    const last = data?.ts ? new Date(data.ts).getTime() : 0;
+    if (Date.now() - last < 6 * 3600 * 1000) return;
+    await sb.from("app_kv").upsert({ key: "ig_cookie_alert", ts: new Date().toISOString() });
+    await sendMessage(
+      Number(chat),
+      "⚠️ يبدو أن كوكيز انستغرام انتهت صلاحيتها — روابط انستغرام لن تُستخرج بالكامل حتى تحدّثها.\nصدّر الكوكيز من جديد (إضافة Cookie-Editor) وأرسلها لتحديثها."
+    );
+  } catch {
+    /* best effort */
+  }
+}
+
 /** Ask the resolver microservice to turn a page URL into direct media URLs. */
 export async function resolveVideoUrl(pageUrl: string): Promise<Resolved | null> {
   const endpoint = process.env.RESOLVER_URL;
@@ -146,6 +165,8 @@ export async function resolveVideoUrl(pageUrl: string): Promise<Resolved | null>
     const j = await res.json();
     if (!j?.video_url && !j?.audio_url) {
       if (j?.error) console.error("resolver error", j.error);
+      // IG failing to resolve almost always means the cookies expired.
+      if (/instagram\.com/i.test(pageUrl)) await maybeAlertIgCookies();
       return null;
     }
     return j;
