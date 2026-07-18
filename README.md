@@ -31,7 +31,7 @@ Phone: share reel / video / photo / text  ──►  Telegram bot
 
 Two Vercel projects:
 - **`recipe-box`** (this repo) — Next.js 15 App Router: Telegram webhook, job worker, gallery, recipe pages, all APIs.
-- **`recipe-resolver`** (`../recipe-resolver`) — Python function using **yt-dlp** to turn a social URL into direct video/audio URLs. Optional Instagram cookies via `RESOLVER_COOKIES`.
+- **[`recipe-resolver`](https://github.com/nightbarron1412/recipe-resolver)** — Python function using **yt-dlp** to turn a social URL into direct video/audio URLs. Optional Instagram cookies via `RESOLVER_COOKIES`.
 
 ## Capture modes
 | Send to the bot | Result |
