@@ -6,9 +6,8 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import type { Recipe } from "@/lib/types";
 import { getEditKey, hasEditKey, addToShopping } from "@/lib/client";
-import { UnlockButton } from "@/app/Unlock";
 import { CartLink } from "@/app/CartLink";
-import { ThemeToggle } from "@/app/ThemeToggle";
+import { HeaderMenu } from "@/app/HeaderMenu";
 import { scaleIngredient, SCALE_OPTIONS } from "@/lib/scale";
 import { Icon } from "@/app/Icon";
 import { toast } from "@/app/Toast";
@@ -139,14 +138,14 @@ export default function RecipeView({
           >
             <Icon name={r.favorite ? "heartFilled" : "heart"} />
           </button>
-          {canEdit && !editing && (
-            <button className="icon-btn" onClick={() => setEditing(true)} title="تعديل" aria-label="تعديل">
-              <Icon name="edit" />
-            </button>
-          )}
-          <ThemeToggle />
           <CartLink />
-          <UnlockButton />
+          <HeaderMenu
+            actions={
+              canEdit && !editing
+                ? [{ icon: "edit", label: "تعديل الوصفة", onClick: () => setEditing(true) }]
+                : []
+            }
+          />
         </div>
       </div>
 

@@ -5,9 +5,8 @@ import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import type { Recipe } from "@/lib/types";
-import { UnlockButton } from "./Unlock";
 import { CartLink } from "./CartLink";
-import { ThemeToggle } from "./ThemeToggle";
+import { HeaderMenu } from "./HeaderMenu";
 import { Icon } from "./Icon";
 import { getEditKey, hasEditKey } from "@/lib/client";
 import { arabicNormalize } from "@/lib/arabic";
@@ -43,7 +42,6 @@ export default function GalleryClient({
   const [onlyCooked, setOnlyCooked] = useState(false);
   const [sort, setSort] = useState<Sort>("newest");
   const [showAllTags, setShowAllTags] = useState(false);
-  const [uploading, setUploading] = useState(false);
   const [canEdit, setCanEdit] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [addUrl, setAddUrl] = useState("");
@@ -169,21 +167,16 @@ export default function GalleryClient({
       toast("فعّل وضع التحرير أولًا (زر القفل).", "error");
       return;
     }
-    setUploading(true);
     toast("جاري قراءة الصورة...");
     const fd = new FormData();
     fd.append("file", file);
-    try {
-      const res = await fetch("/api/photo-save", {
-        method: "POST", headers: { "x-edit-key": getEditKey() }, body: fd,
-      });
-      if (res.ok) {
-        const r = await res.json();
-        router.push(`/recipe/${r.id}`);
-      } else toast("تعذّرت قراءة الصورة.", "error");
-    } finally {
-      setUploading(false);
-    }
+    const res = await fetch("/api/photo-save", {
+      method: "POST", headers: { "x-edit-key": getEditKey() }, body: fd,
+    }).catch(() => null);
+    if (res && res.ok) {
+      const r = await res.json();
+      router.push(`/recipe/${r.id}`);
+    } else toast("تعذّرت قراءة الصورة.", "error");
   };
 
   const exportBackup = async () => {
@@ -221,32 +214,18 @@ export default function GalleryClient({
           </div>
         </div>
         <div className="header-actions">
-          <button
-            className={`icon-btn ${addOpen ? "on" : ""}`}
-            onClick={() => setAddOpen((o) => !o)}
-            title="أضف وصفة برابط"
-            aria-label="أضف برابط"
-          >
-            <Icon name="plus" />
+          <button className="btn-primary add-btn" onClick={() => setAddOpen((o) => !o)}>
+            <Icon name="plus" size={18} /> إضافة
           </button>
-          <button className="icon-btn" onClick={surprise} title="فاجئني بوصفة" aria-label="وصفة عشوائية">
-            <Icon name="dice" />
-          </button>
-          <button
-            className="icon-btn"
-            onClick={() => photoRef.current?.click()}
-            title="أضف وصفة من صورة"
-            aria-label="إضافة من صورة"
-            disabled={uploading}
-          >
-            <Icon name={uploading ? "refresh" : "camera"} className={uploading ? "spin" : ""} />
-          </button>
-          <button className="icon-btn" onClick={exportBackup} title="نسخة احتياطية (تصدير)" aria-label="تصدير">
-            <Icon name="download" />
-          </button>
-          <ThemeToggle />
           <CartLink />
-          <UnlockButton />
+          <HeaderMenu
+            actions={[
+              { icon: "plus", label: "إضافة برابط", onClick: () => setAddOpen(true) },
+              { icon: "camera", label: "إضافة من صورة", onClick: () => photoRef.current?.click() },
+              { icon: "dice", label: "وصفة عشوائية", onClick: surprise },
+              { icon: "download", label: "نسخة احتياطية (تصدير)", onClick: exportBackup },
+            ]}
+          />
         </div>
         <input
           ref={photoRef} type="file" accept="image/*" hidden

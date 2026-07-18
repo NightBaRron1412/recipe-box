@@ -24,13 +24,21 @@ export async function generateMetadata({
   ]
     .filter(Boolean)
     .join(" · ");
+  const images = data.image_url ? [data.image_url] : [];
   return {
     title: `${data.title} — كتاب وصفات أمير`,
     description: desc,
     openGraph: {
       title: data.title || "وصفة",
       description: desc,
-      images: data.image_url ? [data.image_url] : [],
+      images,
+      type: "article",
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: data.title || "وصفة",
+      description: desc,
+      images,
     },
   };
 }

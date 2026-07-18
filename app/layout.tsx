@@ -11,6 +11,7 @@ const tajawal = Tajawal({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://recipes.amirshetaia.com"),
   title: "كتاب وصفات أمير",
   description: "وصفاتي المحفوظة من انستغرام وفيسبوك",
   manifest: "/manifest.webmanifest",
@@ -18,6 +19,17 @@ export const metadata: Metadata = {
     capable: true,
     title: "كتاب وصفات أمير",
     statusBarStyle: "default",
+  },
+  openGraph: {
+    title: "كتاب وصفات أمير",
+    description: "وصفاتي المحفوظة من انستغرام وفيسبوك",
+    type: "website",
+    locale: "ar_AR",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "كتاب وصفات أمير",
+    description: "وصفاتي المحفوظة من انستغرام وفيسبوك",
   },
 };
 

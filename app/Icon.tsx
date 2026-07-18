@@ -94,6 +94,7 @@ const PATHS: Record<string, React.ReactNode> = {
   refresh: <path d="M3 2v6h6M3.5 12a9 9 0 1 0 2-5.3L3 8" />,
   download: <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" />,
   plus: <path d="M12 5v14M5 12h14" />,
+  menu: <path d="M3 6h18M3 12h18M3 18h18" />,
   link: (
     <>
       <path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1" />

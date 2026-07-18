@@ -1074,6 +1074,89 @@ html[data-theme="dark"] .chip.star {
   margin-top: 4px;
 }
 
+/* ---------- Header dropdown menu ---------- */
+.menu-wrap {
+  position: relative;
+}
+.menu-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+}
+.menu-panel {
+  position: absolute;
+  top: 48px;
+  inset-inline-end: 0;
+  z-index: 50;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: var(--shadow-lg);
+  padding: 8px;
+  min-width: 240px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: start;
+  padding: 11px 12px;
+  border: none;
+  background: none;
+  color: var(--ink);
+  border-radius: 10px;
+  font-size: 14px;
+  font-family: inherit;
+  cursor: pointer;
+}
+.menu-item:hover {
+  background: var(--bg);
+}
+.menu-item svg {
+  flex: none;
+  color: var(--muted);
+}
+.menu-item.danger {
+  color: #b23b2c;
+}
+.menu-item.danger svg {
+  color: #b23b2c;
+}
+.menu-item:disabled {
+  opacity: 0.55;
+}
+.menu-div {
+  height: 1px;
+  background: var(--line);
+  margin: 6px 4px;
+}
+.menu-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--muted);
+  padding: 6px 12px 4px;
+}
+.menu-unlock {
+  padding: 4px 8px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.menu-unlock input {
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.add-btn {
+  padding: 9px 16px;
+}
+
 /* ---------- Toasts ---------- */
 .toast-host {
   position: fixed;
