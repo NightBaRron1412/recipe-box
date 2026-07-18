@@ -199,11 +199,10 @@ async function fetchMedia(url: string, maxBytes: number): Promise<Buffer | null>
  * Fetch a recipe from a resolved reel/video: use the video for short clips
  * (captures on-screen text), fall back to the audio track for long ones.
  */
-async function transcribeResolved(
-  url: string,
+async function transcribeFromResolved(
+  resolved: Resolved | null,
   knownTags?: string[]
 ): Promise<ExtractedRecipe | null> {
-  const resolved = await resolveVideoUrl(url);
   if (!resolved) return null;
 
   const isLong =
@@ -422,13 +421,19 @@ export async function saveFromUrl(url: string): Promise<SaveResult> {
   const captionHasRecipe =
     extracted?.is_recipe &&
     ((extracted.ingredients?.length ?? 0) > 0 || (extracted.steps?.length ?? 0) > 0);
+
+  // Resolve once for video platforms — gives the real uploader (channel/account
+  // name) for the chef, and the media URLs for transcription.
+  let resolved: Resolved | null = null;
+  if (VIDEO_PLATFORMS.has(platform)) resolved = await resolveVideoUrl(url);
+
   let viaVideo = false;
   if (!captionHasRecipe && VIDEO_PLATFORMS.has(platform)) {
     let fromVideo: ExtractedRecipe | null = null;
     if (platform === "youtube") {
       fromVideo = await extractRecipeFromYouTube(url, knownTags);
     } else {
-      fromVideo = await transcribeResolved(url, knownTags);
+      fromVideo = await transcribeFromResolved(resolved, knownTags);
     }
     if (
       fromVideo?.is_recipe &&
@@ -438,6 +443,9 @@ export async function saveFromUrl(url: string): Promise<SaveResult> {
       viaVideo = true;
     }
   }
+
+  // Prefer the resolver's uploader (real channel/IG/TikTok account) as the chef.
+  const author = resolved?.uploader || meta.author || null;
 
   const { ingredients, sections } = buildIngredients(extracted);
   const steps = extracted?.steps ?? [];
@@ -452,7 +460,7 @@ export async function saveFromUrl(url: string): Promise<SaveResult> {
   const row = {
     source_url: url,
     platform,
-    author: meta.author ?? null,
+    author,
     title,
     caption: meta.caption ?? null,
     image_url,
