@@ -130,7 +130,7 @@ interface Resolved {
 }
 
 /** Ask the resolver microservice to turn a page URL into direct media URLs. */
-async function resolveVideoUrl(pageUrl: string): Promise<Resolved | null> {
+export async function resolveVideoUrl(pageUrl: string): Promise<Resolved | null> {
   const endpoint = process.env.RESOLVER_URL;
   if (!endpoint) return null;
   try {
