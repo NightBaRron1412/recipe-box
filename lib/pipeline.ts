@@ -313,6 +313,16 @@ export async function fetchMeta(url: string): Promise<PageMeta> {
  */
 export function cleanSocialTitle(raw?: string): { title?: string; author?: string } {
   if (!raw) return {};
+  // Instagram/Facebook: "<name> على/on Instagram: "caption"" → author + caption.
+  const ig = raw
+    .replace(/[‎‏]/g, "")
+    .match(/^(.*?)\s+(?:على|on)\s+(?:Instagram|Facebook)\b[^:]*:\s*["“]?(.*?)["”]?\.?\s*$/s);
+  if (ig) {
+    return {
+      author: ig[1].trim() || undefined,
+      title: ig[2].trim() || undefined,
+    };
+  }
   const parts = raw.split("|").map((s) => s.trim()).filter(Boolean);
   const isStats = (s: string) =>
     /(مشاهدة|تفاعل|إعجاب|تعليق|مشاركة|views?|reactions?|likes?|comments?|shares?)/i.test(s) &&
@@ -420,7 +430,8 @@ export async function saveFromUrl(url: string): Promise<SaveResult> {
   const meta = await fetchMeta(url);
   const cleaned = cleanSocialTitle(meta.title);
   if (cleaned.title) meta.title = cleaned.title;
-  if (!meta.author && cleaned.author) meta.author = cleaned.author;
+  // Prefer the parsed account/page name over generic og:site_name ("Instagram").
+  if (cleaned.author) meta.author = cleaned.author;
 
   // YouTube: yt-dlp is bot-blocked from datacenter IPs, so get the channel name
   // (and a clean title/thumbnail) from the public oEmbed endpoint instead.
