@@ -11,15 +11,19 @@ import {
   markJobError,
   pendingCount,
   purgeOldJobs,
+  reclaimStale,
   triggerWorker,
 } from "@/lib/queue";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-// Spacing between jobs keeps us comfortably under Gemini's per-minute limit.
-const GAP_MS = 3500;
-const BUDGET_MS = 45_000;
+// Spacing between jobs keeps us under Gemini's per-minute limit. Keep the budget
+// low enough that even a worst-case (~40s) job finishes before maxDuration (60s),
+// so the function never gets hard-killed while holding the lock. It re-triggers
+// itself to drain the rest.
+const GAP_MS = 2500;
+const BUDGET_MS = 15_000;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -37,6 +41,8 @@ export async function POST(req: NextRequest) {
     (async () => {
       const deadline = Date.now() + BUDGET_MS;
       await purgeOldJobs().catch(() => {});
+      // We hold the exclusive lock, so any 'processing' job is orphaned — reclaim it.
+      await reclaimStale().catch(() => {});
       try {
         while (Date.now() < deadline) {
           await renewLock();

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Icon } from "./Icon";
 
 export default function NotFound() {
   return (
@@ -9,7 +10,7 @@ export default function NotFound() {
         <h1>الصفحة غير موجودة</h1>
         <p>ربما حُذفت هذه الوصفة أو أن الرابط غير صحيح.</p>
         <Link href="/" className="btn-primary">
-          ← العودة إلى كل الوصفات
+          <Icon name="back" size={17} /> العودة إلى كل الوصفات
         </Link>
       </div>
     </div>

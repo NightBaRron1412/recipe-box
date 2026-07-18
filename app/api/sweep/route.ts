@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
-import { enqueueJob, triggerWorker } from "@/lib/queue";
+import { enqueueJob, triggerWorker, pendingCount } from "@/lib/queue";
 
 export const runtime = "nodejs";
 
@@ -30,6 +30,7 @@ export async function GET(req: NextRequest) {
       requeued++;
     }
   }
-  if (requeued) await triggerWorker();
+  // Also nudge the worker if anything is already waiting (recovers a stalled queue).
+  if (requeued || (await pendingCount()) > 0) await triggerWorker();
   return NextResponse.json({ ok: true, requeued });
 }

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { waitUntil } from "@vercel/functions";
 import { extractUrls, processVideo, processPhoto, searchRecipes } from "@/lib/pipeline";
 import { sendMessage, escapeHtml } from "@/lib/telegram";
-import { enqueueJob, triggerWorker } from "@/lib/queue";
+import { enqueueJob, triggerWorker, queueStatus } from "@/lib/queue";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -40,6 +40,20 @@ export async function POST(req: NextRequest) {
         `• إذا كانت الوصفة مشروحة داخل الفيديو فقط، أرسل <b>الفيديو نفسه</b> وسأستمع إليه وأستخرج الوصفة.\n\n` +
         `معرفك في تيليجرام: <code>${fromId}</code>`
     );
+    return NextResponse.json({ ok: true });
+  }
+
+  if (text === "/queue" || text === "/status" || text === "الطابور") {
+    const s = await queueStatus();
+    if (s.pending || s.processing) {
+      await sendMessage(
+        chatId,
+        `📊 الطابور:\n• قيد الانتظار: ${s.pending}\n• قيد المعالجة: ${s.processing}\n\n⏳ سأحرّك المعالجة الآن...`
+      );
+      waitUntil(triggerWorker());
+    } else {
+      await sendMessage(chatId, "✅ الطابور فارغ — كل الوصفات تمت معالجتها.");
+    }
     return NextResponse.json({ ok: true });
   }
 

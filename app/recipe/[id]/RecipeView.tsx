@@ -199,7 +199,7 @@ export default function RecipeView({
                 src={r.image_url}
                 alt={r.title || "وصفة"}
                 fill
-                sizes="(max-width:900px) 100vw, 860px"
+                sizes="420px"
                 style={{ objectFit: "cover" }}
                 priority
               />

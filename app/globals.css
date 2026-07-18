@@ -981,8 +981,9 @@ html[data-theme="dark"] .fav-filter.active {
 .hero-wrap {
   position: relative;
   width: 100%;
-  aspect-ratio: 3 / 2;
-  max-height: 440px;
+  max-width: 420px;
+  margin: 0 auto;
+  aspect-ratio: 1 / 1;
   border-radius: var(--radius);
   overflow: hidden;
   background: var(--accent-soft);

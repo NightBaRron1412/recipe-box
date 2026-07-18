@@ -21,6 +21,28 @@ export async function pendingCount(): Promise<number> {
   return count || 0;
 }
 
+async function statusCount(status: string): Promise<number> {
+  const { count } = await supabaseAdmin()
+    .from("jobs")
+    .select("id", { count: "exact", head: true })
+    .eq("status", status);
+  return count || 0;
+}
+
+export async function queueStatus(): Promise<{ pending: number; processing: number }> {
+  const [pending, processing] = await Promise.all([
+    statusCount("pending"),
+    statusCount("processing"),
+  ]);
+  return { pending, processing };
+}
+
+/** Reset orphaned 'processing' jobs (worker died mid-job) back to pending.
+ * Safe to call only while holding the worker lock (we're the sole worker). */
+export async function reclaimStale(): Promise<void> {
+  await supabaseAdmin().from("jobs").update({ status: "pending" }).eq("status", "processing");
+}
+
 /** Acquire the single global worker lease. Returns true if we own it. */
 export async function acquireLock(): Promise<boolean> {
   const sb = supabaseAdmin();

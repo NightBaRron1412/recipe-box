@@ -5,7 +5,19 @@ import {
   extractRecipeFromVideo,
   extractRecipeFromYouTube,
   extractRecipeFromImage,
+  estimateNutrition,
 } from "./gemini";
+
+/** Use the extracted nutrition, or estimate it from the ingredients if missing. */
+async function ensureNutrition(
+  extracted: ExtractedRecipe | null,
+  title: string,
+  ingredients: string[]
+) {
+  if (extracted?.nutrition) return extracted.nutrition;
+  if (!ingredients.length) return null;
+  return estimateNutrition(title, ingredients, extracted?.servings ?? null);
+}
 import type { ExtractedRecipe, IngredientSection } from "./types";
 import { normalizeQuantity } from "./scale";
 import { arabicNormalize } from "./arabic";
@@ -450,7 +462,7 @@ export async function saveFromUrl(url: string): Promise<SaveResult> {
     tags: extracted?.tags ?? [],
     servings: extracted?.servings ?? null,
     time_minutes: extracted?.time_minutes ?? null,
-    nutrition: extracted?.nutrition ?? null,
+    nutrition: await ensureNutrition(extracted, title, ingredients),
     status,
     raw: { ...meta, via_video: viaVideo },
     lang: "ar",
@@ -535,7 +547,7 @@ export async function saveFromImage(
     tags: extracted?.tags ?? [],
     servings: extracted?.servings ?? null,
     time_minutes: extracted?.time_minutes ?? null,
-    nutrition: extracted?.nutrition ?? null,
+    nutrition: await ensureNutrition(extracted, title, ingredients),
     status,
     raw: { via: "photo" },
     lang: "ar",
@@ -645,7 +657,7 @@ export async function processVideo(opts: {
     tags: extracted?.tags ?? [],
     servings: extracted?.servings ?? null,
     time_minutes: extracted?.time_minutes ?? null,
-    nutrition: extracted?.nutrition ?? null,
+    nutrition: await ensureNutrition(extracted, title, ingredients),
     status,
     raw: { via: "telegram_video" },
     lang: "ar",
