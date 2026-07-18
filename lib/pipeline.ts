@@ -273,6 +273,23 @@ async function fetchWith(url: string, ua: string): Promise<PageMeta> {
   return metaFromHtml(await res.text());
 }
 
+/** YouTube channel name (+ title/thumbnail) via the public oEmbed endpoint. */
+async function youtubeOEmbed(
+  url: string
+): Promise<{ author?: string; title?: string; thumbnail?: string } | null> {
+  try {
+    const res = await fetch(
+      `https://www.youtube.com/oembed?format=json&url=${encodeURIComponent(url)}`,
+      { headers: { "User-Agent": BROWSER_UA } }
+    );
+    if (!res.ok) return null;
+    const j = await res.json();
+    return { author: j.author_name, title: j.title, thumbnail: j.thumbnail_url };
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Best-effort OpenGraph fetch. Tries the FB/IG crawler UA first (required for
  * their reels), then falls back to a browser UA for sites that prefer it.
@@ -405,6 +422,16 @@ export async function saveFromUrl(url: string): Promise<SaveResult> {
   if (cleaned.title) meta.title = cleaned.title;
   if (!meta.author && cleaned.author) meta.author = cleaned.author;
 
+  // YouTube: yt-dlp is bot-blocked from datacenter IPs, so get the channel name
+  // (and a clean title/thumbnail) from the public oEmbed endpoint instead.
+  let ytAuthor: string | null = null;
+  if (platform === "youtube") {
+    const oe = await youtubeOEmbed(url);
+    if (oe?.author) ytAuthor = oe.author;
+    if (oe?.title) meta.title = oe.title;
+    if (!meta.image && oe?.thumbnail) meta.image = oe.thumbnail;
+  }
+
   // Optimization: reel captions are usually teasers. Only spend a Gemini call on
   // the caption for non-video platforms or genuinely long captions; otherwise go
   // straight to the video/audio (saves a call = faster + avoids quota limits).
@@ -422,10 +449,13 @@ export async function saveFromUrl(url: string): Promise<SaveResult> {
     extracted?.is_recipe &&
     ((extracted.ingredients?.length ?? 0) > 0 || (extracted.steps?.length ?? 0) > 0);
 
-  // Resolve once for video platforms — gives the real uploader (channel/account
-  // name) for the chef, and the media URLs for transcription.
+  // Resolve once for non-YouTube video platforms — gives the real uploader
+  // (IG/TikTok/FB account) for the chef, and the media URLs for transcription.
+  // (YouTube uses oEmbed above + Gemini-native extraction, so skip the resolver.)
   let resolved: Resolved | null = null;
-  if (VIDEO_PLATFORMS.has(platform)) resolved = await resolveVideoUrl(url);
+  if (VIDEO_PLATFORMS.has(platform) && platform !== "youtube") {
+    resolved = await resolveVideoUrl(url);
+  }
 
   let viaVideo = false;
   if (!captionHasRecipe && VIDEO_PLATFORMS.has(platform)) {
@@ -444,8 +474,8 @@ export async function saveFromUrl(url: string): Promise<SaveResult> {
     }
   }
 
-  // Prefer the resolver's uploader (real channel/IG/TikTok account) as the chef.
-  const author = resolved?.uploader || meta.author || null;
+  // Prefer the real uploader (IG/TikTok/FB account or YouTube channel) as the chef.
+  const author = resolved?.uploader || ytAuthor || meta.author || null;
 
   const { ingredients, sections } = buildIngredients(extracted);
   const steps = extracted?.steps ?? [];

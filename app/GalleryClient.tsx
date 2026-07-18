@@ -239,18 +239,27 @@ export default function GalleryClient({
 
       {addOpen && (
         <div className="add-bar">
-          <span className="add-icon"><Icon name="link" size={18} /></span>
-          <input
-            type="url"
-            value={addUrl}
-            onChange={(e) => setAddUrl(e.target.value)}
-            placeholder="ألصق رابط وصفة (انستغرام / فيسبوك / يوتيوب / تيك توك)..."
-            autoFocus
-            onKeyDown={(e) => e.key === "Enter" && addByLink()}
-          />
-          <button className="btn-primary" onClick={addByLink} disabled={adding}>
-            {adding ? "..." : "حفظ"}
-          </button>
+          {adding ? (
+            <div className="add-loading">
+              <Icon name="refresh" size={18} className="spin" />
+              <span>جاري استخراج الوصفة... قد يستغرق حتى دقيقة</span>
+            </div>
+          ) : (
+            <>
+              <span className="add-icon"><Icon name="link" size={18} /></span>
+              <input
+                type="url"
+                value={addUrl}
+                onChange={(e) => setAddUrl(e.target.value)}
+                placeholder="ألصق رابط وصفة (انستغرام / فيسبوك / يوتيوب / تيك توك)..."
+                autoFocus
+                onKeyDown={(e) => e.key === "Enter" && addByLink()}
+              />
+              <button className="btn-primary" onClick={addByLink}>
+                حفظ
+              </button>
+            </>
+          )}
         </div>
       )}
 

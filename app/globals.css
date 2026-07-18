@@ -1062,6 +1062,18 @@ html[data-theme="dark"] .chip.star {
   font-size: 15px;
   padding: 6px;
 }
+.add-loading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 4px;
+  color: var(--muted);
+  font-size: 14px;
+}
+.add-loading svg {
+  color: var(--accent);
+  flex: none;
+}
 
 /* ---------- Ingredient sections ---------- */
 .ing-section {
