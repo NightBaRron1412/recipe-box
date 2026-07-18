@@ -384,6 +384,11 @@ export default function GalleryClient({
               </div>
               <div className="card-body">
                 <h3 className="card-title">{r.title || "وصفة بدون عنوان"}</h3>
+                {r.author && (
+                  <span className="card-author">
+                    <Icon name="user" size={13} /> {r.author}
+                  </span>
+                )}
                 <div className="card-meta">
                   {r.rating ? <span className="chip star">★ {r.rating}</span> : null}
                   {r.time_minutes ? (

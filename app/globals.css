@@ -421,6 +421,19 @@ html[data-theme="dark"] .dup-badge {
   overflow: hidden;
   line-height: 1.5;
 }
+.card-author {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--muted);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.card-author svg {
+  flex: none;
+}
 .card-meta {
   display: flex;
   flex-wrap: wrap;

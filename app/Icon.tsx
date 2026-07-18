@@ -109,6 +109,12 @@ const PATHS: Record<string, React.ReactNode> = {
     </>
   ),
   folder: <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />,
+  user: (
+    <>
+      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+      <circle cx="12" cy="7" r="4" />
+    </>
+  ),
   hat: (
     <>
       <path d="M6 13.9A4 4 0 0 1 7.4 6a5.1 5.1 0 0 1 1-1.5 5 5 0 0 1 7.1 0A5.1 5.1 0 0 1 17.6 6 4 4 0 0 1 19 13.9V21H6z" />
