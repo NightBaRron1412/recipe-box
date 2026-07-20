@@ -84,6 +84,11 @@ export async function PATCH(
   if (Object.keys(update).length === 0) {
     return NextResponse.json({ error: "nothing to update" }, { status: 400 });
   }
+  // Editing the flat ingredient list makes any saved sections stale — clear them
+  // so the edit actually shows (user can re-run "تقسيم المكونات" to regroup).
+  if ("ingredients" in update) {
+    update.ingredient_sections = null;
+  }
 
   const sb = supabaseAdmin();
   const { data, error } = await sb

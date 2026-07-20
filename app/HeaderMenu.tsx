@@ -101,7 +101,8 @@ export function HeaderMenu({ actions = [] }: { actions?: MenuAction[] }) {
                     admin("/api/retag", "تنظيف الوسوم", (j) => `تم توحيد الوسوم (${j.tagsBefore}→${j.tagsAfter}).`)
                   }
                 >
-                  <Icon name="refresh" size={18} /> تنظيف الوسوم
+                  <Icon name="refresh" size={18} className={busy === "تنظيف الوسوم" ? "spin" : ""} />{" "}
+                  {busy === "تنظيف الوسوم" ? "جاري تنظيف الوسوم..." : "تنظيف الوسوم"}
                 </button>
                 <button
                   className="menu-item"
@@ -110,7 +111,8 @@ export function HeaderMenu({ actions = [] }: { actions?: MenuAction[] }) {
                     admin("/api/sections", "تقسيم المكونات", (j) => `تم تقسيم ${j.updated} وصفة.`)
                   }
                 >
-                  <Icon name="utensils" size={18} /> تقسيم المكونات
+                  <Icon name="utensils" size={18} className={busy === "تقسيم المكونات" ? "spin" : ""} />{" "}
+                  {busy === "تقسيم المكونات" ? "جاري تقسيم المكونات..." : "تقسيم المكونات"}
                 </button>
                 <button
                   className="menu-item danger"

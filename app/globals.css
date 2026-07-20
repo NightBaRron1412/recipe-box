@@ -1169,6 +1169,37 @@ html[data-theme="dark"] .chip.star {
   padding: 9px 16px;
 }
 
+/* ---------- Busy overlay ---------- */
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  background: rgba(20, 14, 10, 0.45);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.overlay-box {
+  background: var(--card);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  box-shadow: var(--shadow-lg);
+  padding: 22px 26px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 15px;
+  max-width: 90%;
+  text-align: center;
+}
+.overlay-box svg {
+  color: var(--accent);
+  flex: none;
+}
+
 /* ---------- Toasts ---------- */
 .toast-host {
   position: fixed;

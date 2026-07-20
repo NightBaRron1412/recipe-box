@@ -43,6 +43,7 @@ export default function GalleryClient({
   const [sort, setSort] = useState<Sort>("newest");
   const [showAllTags, setShowAllTags] = useState(false);
   const [canEdit, setCanEdit] = useState(false);
+  const [working, setWorking] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [addUrl, setAddUrl] = useState("");
   const [adding, setAdding] = useState(false);
@@ -167,7 +168,7 @@ export default function GalleryClient({
       toast("فعّل وضع التحرير أولًا (زر القفل).", "error");
       return;
     }
-    toast("جاري قراءة الصورة...");
+    setWorking("جاري قراءة الصورة واستخراج الوصفة...");
     const fd = new FormData();
     fd.append("file", file);
     const res = await fetch("/api/photo-save", {
@@ -176,7 +177,10 @@ export default function GalleryClient({
     if (res && res.ok) {
       const r = await res.json();
       router.push(`/recipe/${r.id}`);
-    } else toast("تعذّرت قراءة الصورة.", "error");
+    } else {
+      setWorking(null);
+      toast("تعذّرت قراءة الصورة.", "error");
+    }
   };
 
   const exportBackup = async () => {
@@ -204,6 +208,14 @@ export default function GalleryClient({
 
   return (
     <div className="container">
+      {working && (
+        <div className="overlay">
+          <div className="overlay-box">
+            <Icon name="refresh" size={22} className="spin" />
+            <span>{working}</span>
+          </div>
+        </div>
+      )}
       <header className="topbar">
         <div className="brand">
           {/* eslint-disable-next-line @next/next/no-img-element */}

@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
     .select("id, title, ingredients, ingredient_sections, status")
     .is("ingredient_sections", null)
     .eq("status", "ok")
-    .limit(10);
+    .limit(6);
 
   let scanned = 0;
   let updated = 0;
