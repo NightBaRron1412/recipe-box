@@ -599,7 +599,8 @@ function EditForm({
 
       <div className="edit-actions">
         <button className="btn-primary" onClick={save} disabled={busy}>
-          <Icon name="check" size={17} /> {busy ? "..." : "حفظ"}
+          <Icon name={busy ? "refresh" : "check"} size={17} className={busy ? "spin" : ""} />{" "}
+          {busy ? "جاري الحفظ..." : "حفظ"}
         </button>
         <button className="btn-ghost" onClick={onCancel} disabled={busy}>
           إلغاء

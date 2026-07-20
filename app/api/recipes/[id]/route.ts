@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
+import { sectionizeIngredients } from "@/lib/gemini";
+import { normalizeQuantity } from "@/lib/scale";
 
 export const runtime = "nodejs";
+export const maxDuration = 30;
 
 function authorized(req: NextRequest): boolean {
   const key = process.env.EDIT_KEY;
@@ -84,13 +87,29 @@ export async function PATCH(
   if (Object.keys(update).length === 0) {
     return NextResponse.json({ error: "nothing to update" }, { status: 400 });
   }
-  // Editing the flat ingredient list makes any saved sections stale — clear them
-  // so the edit actually shows (user can re-run "تقسيم المكونات" to regroup).
-  if ("ingredients" in update) {
-    update.ingredient_sections = null;
-  }
 
   const sb = supabaseAdmin();
+
+  // Editing the ingredients: normalize quantities and RE-SLICE into sections so
+  // the recipe keeps its grouping with the new values (multi-part recipes).
+  if ("ingredients" in update) {
+    const ings = (update.ingredients as string[]).map(normalizeQuantity);
+    let title = typeof update.title === "string" ? update.title : "";
+    if (!title) {
+      const { data: cur } = await sb.from("recipes").select("title").eq("id", id).single();
+      title = cur?.title || "";
+    }
+    const secs = (await sectionizeIngredients(title, ings))
+      .map((s) => ({ title: s.title, items: s.items.map(normalizeQuantity) }))
+      .filter((s) => s.title && s.items.length);
+    if (secs.length >= 2 && secs.flatMap((s) => s.items).length >= ings.length) {
+      update.ingredient_sections = secs;
+      update.ingredients = secs.flatMap((s) => s.items);
+    } else {
+      update.ingredient_sections = null;
+      update.ingredients = ings;
+    }
+  }
   const { data, error } = await sb
     .from("recipes")
     .update(update)
