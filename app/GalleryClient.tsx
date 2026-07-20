@@ -75,7 +75,12 @@ export default function GalleryClient({
     }
   };
 
-  useEffect(() => setCanEdit(hasEditKey()), []);
+  useEffect(() => {
+    const sync = () => setCanEdit(hasEditKey());
+    sync();
+    window.addEventListener("editkey-changed", sync);
+    return () => window.removeEventListener("editkey-changed", sync);
+  }, []);
 
   const deleteRecipe = async (e: React.MouseEvent, id: string) => {
     e.preventDefault();

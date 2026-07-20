@@ -13,6 +13,7 @@ export function setEditKey(v: string) {
   if (typeof window === "undefined") return;
   if (v) window.localStorage.setItem(KEY, v);
   else window.localStorage.removeItem(KEY);
+  window.dispatchEvent(new Event("editkey-changed"));
 }
 
 export function hasEditKey(): boolean {

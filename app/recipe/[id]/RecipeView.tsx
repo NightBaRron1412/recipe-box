@@ -43,21 +43,29 @@ export default function RecipeView({
 
   // Cook mode starts fresh (all unchecked) every visit.
   useEffect(() => {
-    const editable = hasEditKey();
-    setCanEdit(editable);
     setCheckedState([]);
-    // notes are private (not in the public payload) — load them when unlocked.
-    if (editable) {
-      fetch(`/api/recipes/${recipe.id}`, { headers: { "x-edit-key": getEditKey() } })
-        .then((res) => (res.ok ? res.json() : null))
-        .then((d) => {
-          if (d && typeof d.notes === "string") {
-            setNotes(d.notes);
-            setR((c) => ({ ...c, notes: d.notes }));
-          }
-        })
-        .catch(() => {});
-    }
+  }, [recipe.id]);
+
+  // Reflect the unlock state live (no reload) + load private notes when unlocked.
+  useEffect(() => {
+    const sync = () => {
+      const editable = hasEditKey();
+      setCanEdit(editable);
+      if (editable) {
+        fetch(`/api/recipes/${recipe.id}`, { headers: { "x-edit-key": getEditKey() } })
+          .then((res) => (res.ok ? res.json() : null))
+          .then((d) => {
+            if (d && typeof d.notes === "string") {
+              setNotes(d.notes);
+              setR((c) => ({ ...c, notes: d.notes }));
+            }
+          })
+          .catch(() => {});
+      }
+    };
+    sync();
+    window.addEventListener("editkey-changed", sync);
+    return () => window.removeEventListener("editkey-changed", sync);
   }, [recipe.id]);
 
   // Keep in sync when the server re-renders (e.g. after retry via router.refresh).
@@ -138,14 +146,18 @@ export default function RecipeView({
           >
             <Icon name={r.favorite ? "heartFilled" : "heart"} />
           </button>
+          {canEdit && !editing && (
+            <button
+              className="icon-btn"
+              onClick={() => setEditing(true)}
+              title="تعديل الوصفة"
+              aria-label="تعديل"
+            >
+              <Icon name="edit" />
+            </button>
+          )}
           <CartLink />
-          <HeaderMenu
-            actions={
-              canEdit && !editing
-                ? [{ icon: "edit", label: "تعديل الوصفة", onClick: () => setEditing(true) }]
-                : []
-            }
-          />
+          <HeaderMenu />
         </div>
       </div>
 
