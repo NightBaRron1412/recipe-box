@@ -5,7 +5,7 @@ import { sendMessage, escapeHtml } from "@/lib/telegram";
 import { enqueueJob, triggerWorker, queueStatus } from "@/lib/queue";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 export async function POST(req: NextRequest) {
   // 1) Verify the secret header Telegram echoes back from setWebhook.

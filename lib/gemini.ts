@@ -94,11 +94,21 @@ function tagHint(knownTags?: string[]): string {
   );
 }
 
-async function callGemini(parts: unknown[], attempt = 0): Promise<ExtractedRecipe | null> {
+// Heavy video/audio payloads make the primary model (e.g. 3.5-flash) return 503
+// UNAVAILABLE under load; flash-lite has far more free-tier capacity for big
+// multimodal requests. So: retry on 429/503, and fall back to flash-lite once
+// the primary keeps failing — keeps primary quality when up, stays reliable.
+const FALLBACK_MODEL = "gemini-flash-lite-latest";
+
+async function callGemini(
+  parts: unknown[],
+  attempt = 0,
+  model: string = MODEL
+): Promise<ExtractedRecipe | null> {
   const key = process.env.GEMINI_API_KEY;
   if (!key) return null;
   try {
-    const res = await fetch(`${BASE}/v1beta/models/${MODEL}:generateContent`, {
+    const res = await fetch(`${BASE}/v1beta/models/${model}:generateContent`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-goog-api-key": key },
       body: JSON.stringify({
@@ -110,10 +120,12 @@ async function callGemini(parts: unknown[], attempt = 0): Promise<ExtractedRecip
         },
       }),
     });
-    // Per-minute rate limit — wait once and retry (within the function budget).
-    if (res.status === 429 && attempt < 1) {
-      await new Promise((r) => setTimeout(r, 9000));
-      return callGemini(parts, attempt + 1);
+    // 429 (per-minute limit) or 503 (model overloaded): wait and retry, and on
+    // the 2nd try drop to flash-lite if we aren't already on it.
+    if ((res.status === 429 || res.status === 503) && attempt < 2) {
+      await new Promise((r) => setTimeout(r, res.status === 429 ? 9000 : 4000));
+      const next = attempt >= 1 && model !== FALLBACK_MODEL ? FALLBACK_MODEL : model;
+      return callGemini(parts, attempt + 1, next);
     }
     if (!res.ok) {
       console.error("gemini generate error", res.status, await res.text());
