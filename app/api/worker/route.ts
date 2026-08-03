@@ -25,10 +25,15 @@ export const maxDuration = 60;
 const GAP_MS = 2500;
 const BUDGET_MS = 15_000;
 
+function workerSecret(): string {
+  return process.env.WORKER_SECRET || process.env.TELEGRAM_WEBHOOK_SECRET || "";
+}
+
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export async function POST(req: NextRequest) {
-  if (req.headers.get("x-internal-secret") !== process.env.TELEGRAM_WEBHOOK_SECRET) {
+  const secret = workerSecret();
+  if (!secret || req.headers.get("x-internal-secret") !== secret) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 

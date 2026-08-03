@@ -254,6 +254,7 @@ export default function GalleryClient({
         />
       </header>
 
+      <main>
       {addOpen && (
         <div className="add-bar">
           {adding ? (
@@ -406,6 +407,7 @@ export default function GalleryClient({
           ))}
         </div>
       )}
+      </main>
     </div>
   );
 }

@@ -21,6 +21,7 @@ async function ensureNutrition(
 import type { ExtractedRecipe, IngredientSection } from "./types";
 import { normalizeQuantity } from "./scale";
 import { arabicNormalize } from "./arabic";
+import { fetchWithTimeout } from "./http";
 
 /** Search saved recipes by free text (Arabic-normalized token match). */
 export async function searchRecipes(
@@ -153,16 +154,20 @@ export async function resolveVideoUrl(pageUrl: string): Promise<Resolved | null>
   const endpoint = process.env.RESOLVER_URL;
   if (!endpoint) return null;
   try {
-    const res = await fetch(endpoint, {
+    const res = await fetchWithTimeout(endpoint, {
       method: "POST",
       headers: {
         "content-type": "application/json",
         "x-internal-secret": process.env.RESOLVER_SECRET || "",
       },
       body: JSON.stringify({ url: pageUrl }),
-    });
-    if (!res.ok) return null;
-    const j = await res.json();
+    }, 25_000);
+    const j = await res.json().catch(() => null);
+    if (!res.ok) {
+      if (j?.error) console.error("resolver error", j.error);
+      if (/instagram\.com/i.test(pageUrl)) await maybeAlertIgCookies();
+      return null;
+    }
     if (!j?.video_url && !j?.audio_url) {
       if (j?.error) console.error("resolver error", j.error);
       // IG failing to resolve almost always means the cookies expired.
@@ -207,7 +212,7 @@ async function readLimited(res: Response, maxBytes: number): Promise<Buffer | nu
 /** Download a resolved media URL, aborting if it exceeds maxBytes. */
 async function fetchMedia(url: string, maxBytes: number): Promise<Buffer | null> {
   try {
-    const res = await fetch(url, { headers: { "User-Agent": BROWSER_UA } });
+    const res = await fetchWithTimeout(url, { headers: { "User-Agent": BROWSER_UA } }, 30_000);
     if (!res.ok) return null;
     return await readLimited(res, maxBytes);
   } catch (e) {
@@ -286,10 +291,10 @@ function hasContent(m: PageMeta): boolean {
 }
 
 async function fetchWith(url: string, ua: string): Promise<PageMeta> {
-  const res = await fetch(url, {
+  const res = await fetchWithTimeout(url, {
     headers: { "User-Agent": ua, "Accept-Language": "ar,en;q=0.9" },
     redirect: "follow",
-  });
+  }, 15_000);
   if (!res.ok) return {};
   return metaFromHtml(await res.text());
 }
@@ -299,9 +304,10 @@ async function youtubeOEmbed(
   url: string
 ): Promise<{ author?: string; title?: string; thumbnail?: string } | null> {
   try {
-    const res = await fetch(
+    const res = await fetchWithTimeout(
       `https://www.youtube.com/oembed?format=json&url=${encodeURIComponent(url)}`,
-      { headers: { "User-Agent": BROWSER_UA } }
+      { headers: { "User-Agent": BROWSER_UA } },
+      10_000
     );
     if (!res.ok) return null;
     const j = await res.json();
@@ -387,7 +393,7 @@ async function persistImage(
 ): Promise<string | null> {
   if (!imageUrl) return null;
   try {
-    const res = await fetch(imageUrl, { headers: { "User-Agent": BROWSER_UA } });
+    const res = await fetchWithTimeout(imageUrl, { headers: { "User-Agent": BROWSER_UA } }, 15_000);
     if (!res.ok) return null;
     const buf = await readLimited(res, 10 * 1024 * 1024);
     if (!buf) return null;

@@ -1,4 +1,5 @@
 import type { ExtractedRecipe } from "./types";
+import { fetchWithTimeout } from "./http";
 
 const BASE = "https://generativelanguage.googleapis.com";
 // flash-lite has by far the highest free-tier daily quota (flash-latest points
@@ -108,7 +109,7 @@ async function callGemini(
   const key = process.env.GEMINI_API_KEY;
   if (!key) return null;
   try {
-    const res = await fetch(`${BASE}/v1beta/models/${model}:generateContent`, {
+    const res = await fetchWithTimeout(`${BASE}/v1beta/models/${model}:generateContent`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-goog-api-key": key },
       body: JSON.stringify({
@@ -119,7 +120,7 @@ async function callGemini(
           responseSchema: RESPONSE_SCHEMA,
         },
       }),
-    });
+    }, 60_000);
     // 429 (per-minute limit) or 503 (model overloaded): wait and retry, and on
     // the 2nd try drop to flash-lite if we aren't already on it.
     if ((res.status === 429 || res.status === 503) && attempt < 2) {
@@ -161,7 +162,7 @@ async function geminiUploadFile(buf: Buffer, mimeType: string): Promise<string |
   const key = process.env.GEMINI_API_KEY;
   if (!key) return null;
   try {
-    const start = await fetch(`${BASE}/upload/v1beta/files`, {
+    const start = await fetchWithTimeout(`${BASE}/upload/v1beta/files`, {
       method: "POST",
       headers: {
         "x-goog-api-key": key,
@@ -172,20 +173,20 @@ async function geminiUploadFile(buf: Buffer, mimeType: string): Promise<string |
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ file: { display_name: "reel" } }),
-    });
+    }, 20_000);
     const uploadUrl = start.headers.get("x-goog-upload-url");
     if (!uploadUrl) {
       console.error("gemini files: no upload url", start.status, await start.text());
       return null;
     }
-    const up = await fetch(uploadUrl, {
+    const up = await fetchWithTimeout(uploadUrl, {
       method: "POST",
       headers: {
         "X-Goog-Upload-Offset": "0",
         "X-Goog-Upload-Command": "upload, finalize",
       },
       body: new Uint8Array(buf),
-    });
+    }, 90_000);
     if (!up.ok) {
       console.error("gemini files: upload failed", up.status, await up.text());
       return null;
@@ -199,9 +200,9 @@ async function geminiUploadFile(buf: Buffer, mimeType: string): Promise<string |
         return null;
       }
       await new Promise((r) => setTimeout(r, 2000));
-      const g = await fetch(`${BASE}/v1beta/${file.name}`, {
+      const g = await fetchWithTimeout(`${BASE}/v1beta/${file.name}`, {
         headers: { "x-goog-api-key": key },
-      });
+      }, 15_000);
       file = await g.json();
     }
     return file.state === "ACTIVE" ? file.uri : null;
@@ -286,14 +287,14 @@ export async function sectionizeIngredients(
     },
   };
   try {
-    const res = await fetch(`${BASE}/v1beta/models/${MODEL}:generateContent`, {
+    const res = await fetchWithTimeout(`${BASE}/v1beta/models/${MODEL}:generateContent`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-goog-api-key": key },
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
         generationConfig: { temperature: 0, responseMimeType: "application/json", responseSchema: schema },
       }),
-    });
+    }, 45_000);
     if (!res.ok) return [];
     const data = await res.json();
     const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
@@ -333,14 +334,14 @@ export async function estimateNutrition(
     },
   };
   try {
-    const res = await fetch(`${BASE}/v1beta/models/${MODEL}:generateContent`, {
+    const res = await fetchWithTimeout(`${BASE}/v1beta/models/${MODEL}:generateContent`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-goog-api-key": key },
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
         generationConfig: { temperature: 0, responseMimeType: "application/json", responseSchema: schema },
       }),
-    });
+    }, 45_000);
     if (!res.ok) return null;
     const data = await res.json();
     const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
@@ -369,14 +370,14 @@ export async function consolidateTags(tags: string[]): Promise<Record<string, st
     },
   };
   try {
-    const res = await fetch(`${BASE}/v1beta/models/${MODEL}:generateContent`, {
+    const res = await fetchWithTimeout(`${BASE}/v1beta/models/${MODEL}:generateContent`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-goog-api-key": key },
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
         generationConfig: { temperature: 0, responseMimeType: "application/json", responseSchema: schema },
       }),
-    });
+    }, 45_000);
     if (!res.ok) {
       console.error("consolidateTags error", res.status, await res.text());
       return {};

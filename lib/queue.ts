@@ -1,4 +1,9 @@
 import { supabaseAdmin } from "./supabase";
+import { fetchWithTimeout } from "./http";
+
+function workerSecret(): string {
+  return process.env.WORKER_SECRET || process.env.TELEGRAM_WEBHOOK_SECRET || "";
+}
 
 export interface Job {
   id: string;
@@ -111,10 +116,10 @@ export async function triggerWorker(): Promise<void> {
   const base = (process.env.APP_BASE_URL || "").replace(/\/$/, "");
   if (!base) return;
   try {
-    await fetch(`${base}/api/worker`, {
+    await fetchWithTimeout(`${base}/api/worker`, {
       method: "POST",
-      headers: { "x-internal-secret": process.env.TELEGRAM_WEBHOOK_SECRET || "" },
-    });
+      headers: { "x-internal-secret": workerSecret() },
+    }, 10_000);
   } catch {
     /* fire and forget */
   }

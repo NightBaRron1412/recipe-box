@@ -161,6 +161,7 @@ export default function RecipeView({
         </div>
       </div>
 
+      <main>
       {editing ? (
         <EditForm
           r={r}
@@ -490,6 +491,7 @@ export default function RecipeView({
           )}
         </>
       )}
+      </main>
 
       <input
         ref={fileRef}

@@ -77,7 +77,7 @@ server-side via edit key). All writes go through the service-role key behind an 
 | `POST /nutrition` | `x-edit-key` | Backfill nutrition (`{force:true}` re-does all) |
 
 ## Environment (`.env.example`)
-`TELEGRAM_BOT_TOKEN, TELEGRAM_WEBHOOK_SECRET, ALLOWED_TELEGRAM_USER_ID,
+`TELEGRAM_BOT_TOKEN, TELEGRAM_WEBHOOK_SECRET, WORKER_SECRET, ALLOWED_TELEGRAM_USER_ID,
 SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY,
 GEMINI_API_KEY, GEMINI_MODEL (opt, default gemini-flash-lite-latest), APP_BASE_URL,
 RESOLVER_URL, RESOLVER_SECRET, EDIT_KEY, CRON_SECRET`.
@@ -105,3 +105,5 @@ Bot avatar: `@BotFather → /setuserpic` → upload `/pwa-icon?size=512`.
   granted per-column (excluding `notes`). **Adding a new public column?** run
   `GRANT SELECT (new_col) ON public.recipes TO anon;` or public reads of it will 403.
 - **Auth fails closed**: every secret check rejects when the env var is unset (never default-allow).
+- **Worker auth:** use a dedicated `WORKER_SECRET`. Existing deployments fall back to
+  `TELEGRAM_WEBHOOK_SECRET` until the new variable is configured.
