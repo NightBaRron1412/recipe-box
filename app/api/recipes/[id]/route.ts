@@ -24,6 +24,7 @@ const EDITABLE = new Set([
   "image_url",
   "favorite",
   "collections",
+  "nutrition",
   "notes",
   "rating",
   "cooked",
@@ -71,6 +72,29 @@ export async function PATCH(
     } else if (k === "rating") {
       const n = Number(v);
       update[k] = Number.isFinite(n) && n >= 0 && n <= 5 ? Math.round(n) : null;
+    } else if (k === "nutrition") {
+      if (v == null) {
+        update[k] = null;
+        continue;
+      }
+      if (typeof v !== "object" || Array.isArray(v)) {
+        return NextResponse.json({ error: "invalid nutrition" }, { status: 400 });
+      }
+      const source = v as Record<string, unknown>;
+      const nutrition: Record<string, number | null> = {};
+      for (const field of ["calories", "protein_g", "carbs_g", "fat_g"]) {
+        const raw = source[field];
+        if (raw == null || raw === "") {
+          nutrition[field] = null;
+          continue;
+        }
+        const n = Number(raw);
+        if (!Number.isFinite(n) || n < 0 || n > 100_000) {
+          return NextResponse.json({ error: `invalid nutrition.${field}` }, { status: 400 });
+        }
+        nutrition[field] = field === "calories" ? Math.round(n) : Math.round(n * 10) / 10;
+      }
+      update[k] = Object.values(nutrition).every((value) => value == null) ? null : nutrition;
     } else if (
       k === "ingredients" ||
       k === "steps" ||
