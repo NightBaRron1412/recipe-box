@@ -1,13 +1,18 @@
 import type { Metadata, Viewport } from "next";
 import { Tajawal } from "next/font/google";
+import { Analytics } from "@vercel/analytics/next";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 import "./globals.css";
 import { RegisterSW } from "./SW";
 import { ToastHost } from "./Toast";
 
+const themeInit = `(function(){try{var t=localStorage.getItem("theme");if(t==="dark"||(!t&&window.matchMedia&&matchMedia("(prefers-color-scheme:dark)").matches)){document.documentElement.setAttribute("data-theme","dark");}}catch(e){}})();`;
+const isVercel = process.env.VERCEL === "1";
+
 const tajawal = Tajawal({
   subsets: ["arabic"],
-  weight: ["400", "500", "700"],
-  display: "swap",
+  weight: ["400", "700"],
+  display: "optional",
 });
 
 export const metadata: Metadata = {
@@ -45,15 +50,17 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="ar" dir="rtl">
+    <html lang="ar" dir="rtl" suppressHydrationWarning>
       <head>
         {/* Applies saved/system theme before paint to avoid a flash. */}
-        <script src="/theme-init.js" />
+        <script dangerouslySetInnerHTML={{ __html: themeInit }} />
       </head>
       <body className={tajawal.className}>
         {children}
         <ToastHost />
         <RegisterSW />
+        {isVercel && <Analytics />}
+        {isVercel && <SpeedInsights />}
       </body>
     </html>
   );

@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import type { Recipe } from "@/lib/types";
+import type { Nutrition, Recipe } from "@/lib/types";
 import { getEditKey, hasEditKey, addToShopping } from "@/lib/client";
 import { CartLink } from "@/app/CartLink";
 import { HeaderMenu } from "@/app/HeaderMenu";
@@ -20,6 +20,13 @@ const PLATFORM_LABEL: Record<string, string> = {
   video: "الفيديو",
   other: "المصدر",
 };
+
+function nutritionValue(value: number | null | undefined, scale: number, unit = "") {
+  if (value == null) return "—";
+  const scaled = value * scale;
+  const rounded = unit ? Math.round(scaled * 10) / 10 : Math.round(scaled);
+  return `${rounded}${unit}`;
+}
 
 export default function RecipeView({
   recipe,
@@ -96,6 +103,28 @@ export default function RecipeView({
     return true;
   };
 
+  const completeNutrition = async (): Promise<Nutrition | null> => {
+    if (!hasEditKey()) {
+      toast("فعّل وضع التحرير أولًا (زر القفل).", "error");
+      return null;
+    }
+    setBusy(true);
+    const res = await fetch("/api/nutrition", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-edit-key": getEditKey() },
+      body: JSON.stringify({ id: r.id }),
+    }).catch(() => null);
+    setBusy(false);
+    if (!res?.ok) {
+      toast("تعذّر تقدير القيم الغذائية الآن.", "error");
+      return null;
+    }
+    const { nutrition } = (await res.json()) as { nutrition: Nutrition };
+    setR((current) => ({ ...current, nutrition }));
+    toast("تم إكمال القيم الغذائية الناقصة.", "success");
+    return nutrition;
+  };
+
   // Keep the screen awake while viewing a recipe (handy while cooking).
   useEffect(() => {
     let lock: { release: () => void } | null = null;
@@ -167,6 +196,7 @@ export default function RecipeView({
           r={r}
           busy={busy}
           onImage={() => fileRef.current?.click()}
+          onEstimateNutrition={completeNutrition}
           onCancel={() => setEditing(false)}
           onSave={async (patch) => {
             setBusy(true);
@@ -303,41 +333,50 @@ export default function RecipeView({
             </div>
           )}
 
-          {r.nutrition &&
-            (r.nutrition.calories != null ||
-              r.nutrition.protein_g != null ||
-              r.nutrition.carbs_g != null ||
-              r.nutrition.fat_g != null) && (
-              <div className="nutrition">
-                {r.nutrition.calories != null && (
-                  <div className="nut-item">
-                    <b>{Math.round(r.nutrition.calories * scale)}</b>
-                    <span>سعرة</span>
-                  </div>
+          {(r.nutrition || canEdit) && (
+            <section className="nutrition" aria-labelledby="nutrition-title">
+              <div className="nutrition-head">
+                <div>
+                  <h2 id="nutrition-title">القيم الغذائية</h2>
+                  <p>إجمالي الوصفة{scale !== 1 ? ` × ${scale}` : ""} · تقديري</p>
+                </div>
+                {canEdit && (
+                  <button className="nutrition-edit" onClick={() => setEditing(true)}>
+                    <Icon name="edit" size={15} /> تعديل القيم
+                  </button>
                 )}
-                {r.nutrition.protein_g != null && (
-                  <div className="nut-item">
-                    <b>{Math.round(r.nutrition.protein_g * scale)}غ</b>
-                    <span>بروتين</span>
-                  </div>
-                )}
-                {r.nutrition.carbs_g != null && (
-                  <div className="nut-item">
-                    <b>{Math.round(r.nutrition.carbs_g * scale)}غ</b>
-                    <span>كربوهيدرات</span>
-                  </div>
-                )}
-                {r.nutrition.fat_g != null && (
-                  <div className="nut-item">
-                    <b>{Math.round(r.nutrition.fat_g * scale)}غ</b>
-                    <span>دهون</span>
-                  </div>
-                )}
-                <span className="nut-note">
-                  إجمالي الوصفة{scale !== 1 ? ` × ${scale}` : ""} (تقديري)
-                </span>
               </div>
-            )}
+              <div className="nutrition-values">
+                <div className={`nut-item ${r.nutrition?.calories == null ? "missing" : ""}`}>
+                  <b>{nutritionValue(r.nutrition?.calories, scale)}</b>
+                  <span>سعرة</span>
+                </div>
+                <div className={`nut-item ${r.nutrition?.protein_g == null ? "missing" : ""}`}>
+                  <b>{nutritionValue(r.nutrition?.protein_g, scale, "غ")}</b>
+                  <span>بروتين</span>
+                </div>
+                <div className={`nut-item ${r.nutrition?.carbs_g == null ? "missing" : ""}`}>
+                  <b>{nutritionValue(r.nutrition?.carbs_g, scale, "غ")}</b>
+                  <span>كربوهيدرات</span>
+                </div>
+                <div className={`nut-item ${r.nutrition?.fat_g == null ? "missing" : ""}`}>
+                  <b>{nutritionValue(r.nutrition?.fat_g, scale, "غ")}</b>
+                  <span>دهون</span>
+                </div>
+              </div>
+              {canEdit &&
+                (!r.nutrition ||
+                  r.nutrition.calories == null ||
+                  r.nutrition.protein_g == null ||
+                  r.nutrition.carbs_g == null ||
+                  r.nutrition.fat_g == null) && (
+                  <button className="nutrition-complete" onClick={completeNutrition} disabled={busy}>
+                    <Icon name="refresh" size={15} className={busy ? "spin" : ""} />
+                    {busy ? "جاري التقدير..." : "إكمال القيم الناقصة تلقائيًا"}
+                  </button>
+                )}
+            </section>
+          )}
 
           {ingredients.length > 0 && (
             <div className="section">
@@ -529,6 +568,7 @@ function EditForm({
   onCancel,
   onDelete,
   onImage,
+  onEstimateNutrition,
 }: {
   r: Recipe;
   busy: boolean;
@@ -536,6 +576,7 @@ function EditForm({
   onCancel: () => void;
   onDelete: () => void;
   onImage: () => void;
+  onEstimateNutrition: () => Promise<Nutrition | null>;
 }) {
   const [title, setTitle] = useState(r.title || "");
   const [author, setAuthor] = useState(r.author || "");
@@ -545,8 +586,19 @@ function EditForm({
   const [collections, setCollections] = useState((r.collections || []).join("، "));
   const [ingredients, setIngredients] = useState((r.ingredients || []).join("\n"));
   const [steps, setSteps] = useState((r.steps || []).join("\n"));
+  const [calories, setCalories] = useState(r.nutrition?.calories?.toString() || "");
+  const [protein, setProtein] = useState(r.nutrition?.protein_g?.toString() || "");
+  const [carbs, setCarbs] = useState(r.nutrition?.carbs_g?.toString() || "");
+  const [fat, setFat] = useState(r.nutrition?.fat_g?.toString() || "");
 
-  const save = () =>
+  const toNumber = (value: string) => (value.trim() === "" ? null : Number(value));
+  const save = () => {
+    const nutrition = {
+      calories: toNumber(calories),
+      protein_g: toNumber(protein),
+      carbs_g: toNumber(carbs),
+      fat_g: toNumber(fat),
+    };
     onSave({
       title,
       author,
@@ -556,20 +608,37 @@ function EditForm({
       collections: collections.split(/[،,\n]/).map((s) => s.trim()).filter(Boolean),
       ingredients: ingredients.split("\n").map((s) => s.trim()).filter(Boolean),
       steps: steps.split("\n").map((s) => s.trim()).filter(Boolean),
+      nutrition: Object.values(nutrition).every((value) => value == null) ? null : nutrition,
       status: "ok",
     });
+  };
+
+  const estimateNutrition = async () => {
+    const nutrition = await onEstimateNutrition();
+    if (!nutrition) return;
+    setCalories(nutrition.calories?.toString() || "");
+    setProtein(nutrition.protein_g?.toString() || "");
+    setCarbs(nutrition.carbs_g?.toString() || "");
+    setFat(nutrition.fat_g?.toString() || "");
+  };
 
   return (
     <div className="edit-form">
-      <div className="edit-hero">
-        {r.image_url ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={r.image_url} alt="" className="recipe-hero" />
-        ) : (
-          <div className="recipe-hero placeholder-hero">🍲</div>
-        )}
-        <button className="btn-ghost change-img" onClick={onImage} disabled={busy}>
-          <Icon name="camera" size={16} /> تغيير الصورة
+      <div className="edit-photo">
+        <div className="edit-photo-preview">
+          {r.image_url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={r.image_url} alt={`صورة ${r.title || "الوصفة"}`} className="recipe-hero" />
+          ) : (
+            <div className="recipe-hero placeholder-hero">🍲</div>
+          )}
+        </div>
+        <button type="button" className="photo-change-button" onClick={onImage} disabled={busy}>
+          <span className="photo-change-icon"><Icon name="camera" size={20} /></span>
+          <span>
+            <strong>{r.image_url ? "استبدال صورة الوصفة" : "إضافة صورة للوصفة"}</strong>
+            <small>اختر صورة JPG أو PNG أو WebP حتى 10 ميجابايت</small>
+          </span>
         </button>
       </div>
 
@@ -594,6 +663,37 @@ function EditForm({
           />
         </div>
       </div>
+
+      <fieldset className="nutrition-editor">
+        <div className="nutrition-editor-head">
+          <div>
+            <legend>القيم الغذائية</legend>
+            <p>إجمالي الوصفة كاملة، وليست للحصة الواحدة.</p>
+          </div>
+          <button type="button" className="btn-ghost" onClick={estimateNutrition} disabled={busy}>
+            <Icon name="refresh" size={15} className={busy ? "spin" : ""} />
+            {busy ? "جاري التقدير..." : "إكمال الناقص تلقائيًا"}
+          </button>
+        </div>
+        <div className="macro-grid">
+          <label htmlFor="nutrition-calories">
+            السعرات
+            <input id="nutrition-calories" type="number" min="0" step="1" value={calories} onChange={(e) => setCalories(e.target.value)} />
+          </label>
+          <label htmlFor="nutrition-protein">
+            البروتين (غ)
+            <input id="nutrition-protein" type="number" min="0" step="0.1" value={protein} onChange={(e) => setProtein(e.target.value)} />
+          </label>
+          <label htmlFor="nutrition-carbs">
+            الكربوهيدرات (غ)
+            <input id="nutrition-carbs" type="number" min="0" step="0.1" value={carbs} onChange={(e) => setCarbs(e.target.value)} />
+          </label>
+          <label htmlFor="nutrition-fat">
+            الدهون (غ)
+            <input id="nutrition-fat" type="number" min="0" step="0.1" value={fat} onChange={(e) => setFat(e.target.value)} />
+          </label>
+        </div>
+      </fieldset>
 
       <label>الوسوم (افصل بفاصلة)</label>
       <input value={tags} onChange={(e) => setTags(e.target.value)} />

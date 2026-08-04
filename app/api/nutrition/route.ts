@@ -12,8 +12,48 @@ export async function POST(req: NextRequest) {
   if (req.headers.get("x-edit-key") !== process.env.EDIT_KEY) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
-  const force = (await req.json().catch(() => null))?.force === true;
+  const body = await req.json().catch(() => null);
+  const force = body?.force === true;
   const sb = supabaseAdmin();
+
+  // Complete the missing values for one recipe without overwriting values that
+  // were already saved or manually corrected.
+  if (typeof body?.id === "string" && body.id) {
+    const { data: recipe, error: readError } = await sb
+      .from("recipes")
+      .select("id, title, ingredients, servings, nutrition")
+      .eq("id", body.id)
+      .single();
+    if (readError || !recipe) {
+      return NextResponse.json({ error: readError?.message || "not found" }, { status: 404 });
+    }
+    if (!(recipe.ingredients || []).length) {
+      return NextResponse.json({ error: "ingredients required" }, { status: 400 });
+    }
+
+    const estimate = await estimateNutrition(recipe.title || "", recipe.ingredients, recipe.servings);
+    if (!estimate) {
+      return NextResponse.json({ error: "nutrition estimate unavailable" }, { status: 503 });
+    }
+    const current = recipe.nutrition || {};
+    const nutrition = {
+      calories: current.calories ?? estimate.calories,
+      protein_g: current.protein_g ?? estimate.protein_g,
+      carbs_g: current.carbs_g ?? estimate.carbs_g,
+      fat_g: current.fat_g ?? estimate.fat_g,
+    };
+    const { data: updated, error: updateError } = await sb
+      .from("recipes")
+      .update({ nutrition })
+      .eq("id", recipe.id)
+      .select("nutrition")
+      .single();
+    if (updateError) {
+      return NextResponse.json({ error: updateError.message }, { status: 500 });
+    }
+    return NextResponse.json({ ok: true, nutrition: updated.nutrition });
+  }
+
   let q = sb
     .from("recipes")
     .select("id, title, ingredients, servings, status")

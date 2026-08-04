@@ -18,6 +18,7 @@ const PLATFORM_LABEL: Record<string, string> = {
 };
 
 type Sort = "newest" | "oldest" | "fastest" | "az";
+const PAGE_SIZE = 24;
 
 const norm = (s?: string | null) => (s || "").trim().toLowerCase();
 
@@ -42,6 +43,7 @@ export default function GalleryClient({
   const [onlyCooked, setOnlyCooked] = useState(false);
   const [sort, setSort] = useState<Sort>("newest");
   const [showAllTags, setShowAllTags] = useState(false);
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [canEdit, setCanEdit] = useState(false);
   const [working, setWorking] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
@@ -150,6 +152,12 @@ export default function GalleryClient({
     });
     return list;
   }, [recipes, q, tags, platform, status, sort, onlyFav, onlyCooked, collection]);
+
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE);
+  }, [recipes, q, tags, platform, status, sort, onlyFav, onlyCooked, collection]);
+
+  const visibleRecipes = filtered.slice(0, visibleCount);
 
   const toggleTag = (t: string) =>
     setTags((cur) => (cur.includes(t) ? cur.filter((x) => x !== t) : [...cur, t]));
@@ -303,23 +311,23 @@ export default function GalleryClient({
             <Icon name="check" size={16} /> طبختها
           </button>
           {collections.length > 0 && (
-            <select value={collection} onChange={(e) => setCollection(e.target.value)}>
+            <select aria-label="تصفية حسب المجموعة" value={collection} onChange={(e) => setCollection(e.target.value)}>
               <option value="">كل المجموعات</option>
               {collections.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
           )}
           {platforms.length > 1 && (
-            <select value={platform} onChange={(e) => setPlatform(e.target.value)}>
+            <select aria-label="تصفية حسب المصدر" value={platform} onChange={(e) => setPlatform(e.target.value)}>
               <option value="">كل المصادر</option>
               {platforms.map((p) => <option key={p} value={p}>{PLATFORM_LABEL[p] || p}</option>)}
             </select>
           )}
-          <select value={status} onChange={(e) => setStatus(e.target.value)}>
+          <select aria-label="تصفية حسب الحالة" value={status} onChange={(e) => setStatus(e.target.value)}>
             <option value="">كل الحالات</option>
             <option value="ok">مكتملة</option>
             <option value="needs_review">بحاجة لمراجعة{reviewCount ? ` (${reviewCount})` : ""}</option>
           </select>
-          <select value={sort} onChange={(e) => setSort(e.target.value as Sort)}>
+          <select aria-label="ترتيب الوصفات" value={sort} onChange={(e) => setSort(e.target.value as Sort)}>
             <option value="newest">الأحدث</option>
             <option value="oldest">الأقدم</option>
             <option value="fastest">الأسرع تحضيرًا</option>
@@ -360,52 +368,74 @@ export default function GalleryClient({
           )}
         </div>
       ) : (
-        <div className="grid">
-          {filtered.map((r) => (
-            <Link href={`/recipe/${r.id}`} key={r.id} className="card">
-              <div className="card-thumb-wrap">
-                {r.image_url ? (
-                  <Image
-                    src={r.image_url}
-                    alt={r.title || "وصفة"}
-                    fill
-                    sizes="(max-width:600px) 45vw, 230px"
-                    className="card-thumb"
-                    style={{ objectFit: "cover" }}
-                  />
-                ) : (
-                  <div className="card-thumb placeholder"><Icon name="hat" size={40} /></div>
-                )}
-                <div className="badges-top">
-                  {r.status === "needs_review" && <span className="review-badge">بحاجة لمراجعة</span>}
-                  {r.cooked && <span className="cooked-badge"><Icon name="check" size={12} /> طبختها</span>}
-                  {dupTitles.has(norm(r.title)) && <span className="dup-badge">مكرر؟</span>}
-                </div>
-                {r.favorite && <span className="fav-badge"><Icon name="heartFilled" size={16} /></span>}
-                {canEdit && (
-                  <button className="card-del" onClick={(e) => deleteRecipe(e, r.id)} aria-label="حذف">
-                    <Icon name="trash" size={14} />
-                  </button>
-                )}
-              </div>
-              <div className="card-body">
-                <h3 className="card-title">{r.title || "وصفة بدون عنوان"}</h3>
-                {r.author && (
-                  <span className="card-author">
-                    <Icon name="user" size={13} /> {r.author}
-                  </span>
-                )}
-                <div className="card-meta">
-                  {r.rating ? <span className="chip star">★ {r.rating}</span> : null}
-                  {r.time_minutes ? (
-                    <span className="chip time"><Icon name="clock" size={13} /> {r.time_minutes} د</span>
-                  ) : null}
-                  {(r.tags || []).slice(0, 2).map((t) => <span className="chip" key={t}>{t}</span>)}
-                </div>
-              </div>
-            </Link>
-          ))}
-        </div>
+        <>
+          <div className="grid">
+            {visibleRecipes.map((r, index) => {
+              const title = r.title || "وصفة بدون عنوان";
+
+              return (
+                <article className="card" key={r.id}>
+                  <Link href={`/recipe/${r.id}`} className="card-link">
+                    <span className="sr-only">النتيجة رقم {index + 1}: </span>
+                    <div className="card-thumb-wrap">
+                      {r.image_url ? (
+                        <Image
+                          src={r.image_url}
+                          alt={title}
+                          fill
+                          sizes="(max-width:600px) 45vw, 230px"
+                          quality={55}
+                          priority={index === 0}
+                          fetchPriority={index === 0 ? "high" : "auto"}
+                          className="card-thumb"
+                          style={{ objectFit: "cover" }}
+                        />
+                      ) : (
+                        <div className="card-thumb placeholder"><Icon name="hat" size={40} /></div>
+                      )}
+                      <div className="badges-top">
+                        {r.status === "needs_review" && <span className="review-badge">بحاجة لمراجعة</span>}
+                        {r.cooked && <span className="cooked-badge"><Icon name="check" size={12} /> طبختها</span>}
+                        {dupTitles.has(norm(r.title)) && <span className="dup-badge">مكرر؟</span>}
+                      </div>
+                      {r.favorite && <span className="fav-badge"><Icon name="heartFilled" size={16} /></span>}
+                    </div>
+                    <div className="card-body">
+                      <h2 className="card-title">{title}</h2>
+                      {r.author && (
+                        <span className="card-author">
+                          <Icon name="user" size={13} /> {r.author}
+                        </span>
+                      )}
+                      <div className="card-meta">
+                        {r.rating ? <span className="chip star">★ {r.rating}</span> : null}
+                        {r.time_minutes ? (
+                          <span className="chip time"><Icon name="clock" size={13} /> {r.time_minutes} د</span>
+                        ) : null}
+                        {(r.tags || []).slice(0, 2).map((t) => <span className="chip" key={t}>{t}</span>)}
+                      </div>
+                    </div>
+                  </Link>
+                  {canEdit && (
+                    <button className="card-del" onClick={(e) => deleteRecipe(e, r.id)} aria-label={`حذف ${title}`}>
+                      <Icon name="trash" size={14} />
+                    </button>
+                  )}
+                </article>
+              );
+            })}
+          </div>
+          {visibleRecipes.length < filtered.length && (
+            <div className="load-more">
+              <button
+                className="btn-ghost"
+                onClick={() => setVisibleCount((count) => Math.min(count + PAGE_SIZE, filtered.length))}
+              >
+                عرض المزيد ({filtered.length - visibleRecipes.length})
+              </button>
+            </div>
+          )}
+        </>
       )}
       </main>
     </div>
