@@ -87,7 +87,7 @@ export function scaleIngredient(text: string, factor: number): string {
   if (!factor || factor === 1) return text;
   const s = toLatin(text.trim());
 
-  const m = s.match(/^(\d+(?:\.\d+)?)\s*(?:[-–]\s*(\d+(?:\.\d+)?))?\s*([½¼¾⅓⅔⅛⅜])?/);
+  const m = s.match(/^(\d+(?:\.\d+)?)(?:\s*[-–]\s*(\d+(?:\.\d+)?))?(?:\s*([½¼¾⅓⅔⅛⅜]))?/);
   if (m && m[1] && m[0].trim()) {
     const base = parseFloat(m[1]) + (m[3] ? UNICODE_FRAC[m[3]] || 0 : 0);
     let out = fmt(base * factor);
@@ -106,6 +106,37 @@ export function scaleIngredient(text: string, factor: number): string {
   }
   if (UNIT.test(s)) return fmt(1 * factor) + " " + s;
   return text;
+}
+
+const INLINE_WORD_QUANTITY =
+  "(?:نصف|نص|ربع|ثلث|واحدة|واحد|اثنتين|اثنتان|اثنين|اثنان|ثلاثة|ثلاث|أربعة|أربع|اربعة|اربع|خمسة|خمس|ستة|ست|سبعة|سبع|ثمانية|ثماني|ثمان|تسعة|تسع|عشرة|عشر)";
+const INLINE_NUMBER_QUANTITY =
+  "(?:(?:[0-9٠-٩]+(?:[.٫][0-9٠-٩]+)?)(?:\\s*[-–]\\s*[0-9٠-٩]+(?:[.٫][0-9٠-٩]+)?)?\\s*[½¼¾⅓⅔⅛⅜]?|[½¼¾⅓⅔⅛⅜])";
+const INLINE_UNIT =
+  "(?:أكواب|اكواب|كوب|كوباية|كوبايه|كأس|كاس|كاسة|كاسه|ملاعق|ملعقة|ملعقه|حبات|حبة|حبه|فصوص|فص|علب|علبة|علبه|ثمرات|ثمرة|ثمره|رأس|راس|شرائح|شريحة|شريحه|قطع|قطعة|قطعه|كيلوغرام|كيلوجرام|كيلو|كغ|غرام|جرام|غم|جم|غ|مليلتر|مل|لتر|رشة|رشه|حزمة|حزمه|ظرف|cups?|tbsp|tablespoons?|tsp|teaspoons?|grams?|kg|g|ml|lit(?:er|re)s?|oz|ounces?)";
+const INLINE_DUAL =
+  "(?:كوب(?:ين|ان)|ملعقت(?:ين|ان)|حبت(?:ين|ان)|فص(?:ين|ان)|كأس(?:ين|ان)|علبت(?:ين|ان)|ثمرت(?:ين|ان)|رأس(?:ين|ان)|شريحت(?:ين|ان)|قطعت(?:ين|ان)|كيلوين|لترين)";
+const INLINE_BARE_UNIT =
+  "(?:كوب|كوباية|كوبايه|كأس|كاس|كاسة|كاسه|ملعقة|ملعقه|حبة|حبه|فص|علبة|علبه|ثمرة|ثمره|رأس|راس|شريحة|شريحه|قطعة|قطعه|كيلو|لتر|رشة|رشه|حزمة|حزمه|ظرف)";
+const INLINE_AMOUNT = new RegExp(
+  `(^|[^\\p{L}\\p{N}])(و?)((?:(?:${INLINE_NUMBER_QUANTITY}|${INLINE_WORD_QUANTITY})\\s*${INLINE_UNIT})|${INLINE_DUAL}|${INLINE_BARE_UNIT})(?=$|[^\\p{L}\\p{N}])`,
+  "giu"
+);
+
+/** Scale ingredient quantities wherever they appear in a preparation step.
+ * Only phrases tied to cooking units are changed, so times, temperatures, and
+ * numbered instructions remain untouched. */
+export function scaleInstruction(text: string, factor: number): string {
+  if (!factor || factor === 1 || !text) return text;
+  return text.replace(INLINE_AMOUNT, (match, prefix: string, conjunction: string, phrase: string) => {
+    const marker = "__recipe_amount_end__";
+    const scaled = scaleIngredient(`${phrase} ${marker}`, factor)
+      .replace(new RegExp(`\\s*${marker}$`), "")
+      .trim();
+    // Numeric English units are handled by scaleIngredient. Bare-unit matches
+    // are Arabic units that scaleIngredient already understands.
+    return `${prefix}${conjunction}${scaled || match.slice(prefix.length + conjunction.length)}`;
+  });
 }
 
 export const SCALE_OPTIONS: { label: string; value: number }[] = [

@@ -25,6 +25,9 @@ export async function POST(req: NextRequest) {
   try {
     const buf = Buffer.from(await file.arrayBuffer());
     const r = await saveFromImage(buf, file.type || "image/jpeg", { caption });
+    if (r.duplicate) {
+      return NextResponse.json({ error: "duplicate", ...r }, { status: 409 });
+    }
     return NextResponse.json({ ok: true, ...r });
   } catch (e) {
     console.error("photo-save failed", e);

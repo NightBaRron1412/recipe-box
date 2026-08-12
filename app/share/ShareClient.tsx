@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { getEditKey, setEditKey } from "@/lib/client";
 
-type State = "idle" | "saving" | "done" | "error" | "nokey" | "nourl";
+type State = "idle" | "saving" | "done" | "duplicate" | "error" | "nokey" | "nourl";
 
 export default function ShareClient({ shared }: { shared: string }) {
   const router = useRouter();
@@ -30,12 +30,18 @@ export default function ShareClient({ shared }: { shared: string }) {
         headers: { "content-type": "application/json", "x-edit-key": getEditKey() },
         body: JSON.stringify({ url: shared }),
       });
+      const r = await res.json().catch(() => null);
+      if (res.status === 409 && r?.id) {
+        setState("duplicate");
+        setMsg(r.title || "");
+        setTimeout(() => router.replace(`/recipe/${r.id}`), 1200);
+        return;
+      }
       if (!res.ok) {
         setState("error");
         setMsg(res.status === 401 ? "مفتاح التحرير غير صحيح." : "تعذّر الحفظ.");
         return;
       }
-      const r = await res.json();
       setState("done");
       setMsg(r.title || "");
       setTimeout(() => router.replace(`/recipe/${r.id}`), 900);
@@ -68,6 +74,14 @@ export default function ShareClient({ shared }: { shared: string }) {
             <div className="big-ok">✅</div>
             <h2>تم الحفظ!</h2>
             <p className="muted">{msg}</p>
+          </>
+        )}
+        {state === "duplicate" && (
+          <>
+            <div className="big-ok">ℹ️</div>
+            <h2>الوصفة محفوظة مسبقًا</h2>
+            <p className="muted">{msg}</p>
+            <p className="muted">لم تتم إضافة نسخة أخرى. جارٍ فتح الوصفة الأصلية…</p>
           </>
         )}
         {state === "nourl" && (

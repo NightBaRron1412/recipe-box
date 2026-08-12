@@ -48,7 +48,7 @@ Live search (Arabic-normalized), tag/collection/platform/status/favorite/cooked 
 servings **scaler** (scales quantities + whole-recipe macros), **nutrition** estimate,
 **cook mode** (tap to check off, resets each visit), **notes + rating + "طبختها"**,
 grouped **ingredient sections** for multi-part recipes, favorites & collections, duplicate
-flagging + quick delete, edit/replace-image/delete, print/copy, **backup export**, dark mode,
+rejection by canonical source + matching content, edit/replace-image/delete, print/copy, **backup export**, dark mode,
 installable **PWA** with share target, self-healing daily retry.
 
 ## Data model (`public.recipes`)
