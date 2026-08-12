@@ -20,6 +20,9 @@ export async function POST(req: NextRequest) {
   }
   try {
     const r = await saveFromUrl(url);
+    if (r.duplicate) {
+      return NextResponse.json({ error: "duplicate", ...r }, { status: 409 });
+    }
     return NextResponse.json({ ok: true, ...r });
   } catch (e) {
     console.error("web-save failed", e);

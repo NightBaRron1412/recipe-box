@@ -66,11 +66,16 @@ export default function GalleryClient({
         headers: { "content-type": "application/json", "x-edit-key": getEditKey() },
         body: JSON.stringify({ url }),
       });
+      const result = await res.json().catch(() => null);
       if (res.ok) {
-        const r = await res.json();
         setAddUrl("");
         setAddOpen(false);
-        router.push(`/recipe/${r.id}`);
+        router.push(`/recipe/${result.id}`);
+      } else if (res.status === 409 && result?.id) {
+        setAddUrl("");
+        setAddOpen(false);
+        toast("هذه الوصفة محفوظة مسبقًا — لم تتم إضافة نسخة أخرى.", "success");
+        router.push(`/recipe/${result.id}`);
       } else toast("تعذّر حفظ الرابط.", "error");
     } finally {
       setAdding(false);
@@ -187,9 +192,13 @@ export default function GalleryClient({
     const res = await fetch("/api/photo-save", {
       method: "POST", headers: { "x-edit-key": getEditKey() }, body: fd,
     }).catch(() => null);
+    const result = res ? await res.json().catch(() => null) : null;
     if (res && res.ok) {
-      const r = await res.json();
-      router.push(`/recipe/${r.id}`);
+      router.push(`/recipe/${result.id}`);
+    } else if (res?.status === 409 && result?.id) {
+      setWorking(null);
+      toast("هذه الوصفة محفوظة مسبقًا — لم تتم إضافة نسخة أخرى.", "success");
+      router.push(`/recipe/${result.id}`);
     } else {
       setWorking(null);
       toast("تعذّرت قراءة الصورة.", "error");

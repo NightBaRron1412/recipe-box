@@ -21,6 +21,7 @@ async function ensureNutrition(
 import type { ExtractedRecipe, IngredientSection } from "./types";
 import { normalizeQuantity } from "./scale";
 import { arabicNormalize } from "./arabic";
+import { canonicalizeRecipeUrl, isDuplicateRecipe, type RecipeIdentity } from "./dedupe";
 import { fetchWithTimeout } from "./http";
 
 /** Search saved recipes by free text (Arabic-normalized token match). */
@@ -385,6 +386,17 @@ async function uploadImageBuffer(
   }
 }
 
+/** Remove every supported cover extension for an abandoned insert. Uploads use
+ * a recipe id as the basename, so cleanup is deterministic and best-effort. */
+async function removeRecipeImage(
+  sb: ReturnType<typeof supabaseAdmin>,
+  id: string
+): Promise<void> {
+  const paths = ["jpg", "png", "webp"].map((ext) => `${id}.${ext}`);
+  const { error } = await sb.storage.from("recipe-images").remove(paths);
+  if (error) console.error("duplicate image cleanup failed", error);
+}
+
 /** Download the cover image from a URL and store it. Returns public URL or null. */
 async function persistImage(
   sb: ReturnType<typeof supabaseAdmin>,
@@ -412,6 +424,35 @@ async function getKnownTags(sb: ReturnType<typeof supabaseAdmin>): Promise<strin
   return [...count.entries()].sort((a, b) => b[1] - a[1]).slice(0, 60).map(([t]) => t);
 }
 
+type StoredRecipeIdentity = RecipeIdentity & {
+  id: string;
+  status: SaveResult["status"];
+};
+
+/** Find an already-complete recipe with the same canonical source or strongly
+ * matching title + content. The conservative content threshold lives in the
+ * pure dedupe module so it can be regression-tested without a database. */
+async function findDuplicateRecipe(
+  sb: ReturnType<typeof supabaseAdmin>,
+  candidate: RecipeIdentity,
+  excludeId?: string
+): Promise<StoredRecipeIdentity | null> {
+  const { data, error } = await sb
+    .from("recipes")
+    .select("id,status,source_url,title,ingredients,steps")
+    .eq("status", "ok")
+    .limit(1000);
+  if (error) {
+    console.error("duplicate lookup failed", error);
+    return null;
+  }
+  return (
+    ((data || []) as StoredRecipeIdentity[]).find(
+      (recipe) => recipe.id !== excludeId && isDuplicateRecipe(candidate, recipe)
+    ) || null
+  );
+}
+
 export interface SaveResult {
   id: string;
   status: "ok" | "needs_review" | "fetch_failed";
@@ -429,12 +470,14 @@ export interface SaveResult {
 export async function saveFromUrl(url: string): Promise<SaveResult> {
   const sb = supabaseAdmin();
   const platform = detectPlatform(url);
+  const sourceUrl = canonicalizeRecipeUrl(url);
 
-  const { data: existing } = await sb
+  const { data: existingRows } = await sb
     .from("recipes")
     .select("id, image_url, status, title, ingredients, steps")
-    .eq("source_url", url)
-    .maybeSingle();
+    .in("source_url", [...new Set([url, sourceUrl])])
+    .limit(1);
+  const existing = existingRows?.[0] || null;
 
   // Already have a good version — don't clobber it (protects manual edits).
   if (
@@ -525,8 +568,28 @@ export async function saveFromUrl(url: string): Promise<SaveResult> {
   else if (!extracted?.is_recipe || (ingredients.length === 0 && steps.length === 0))
     status = "needs_review";
 
+  if (!existing) {
+    const duplicate = await findDuplicateRecipe(sb, {
+      source_url: sourceUrl,
+      title,
+      ingredients,
+      steps,
+    });
+    if (duplicate) {
+      await removeRecipeImage(sb, id);
+      return {
+        id: duplicate.id,
+        status: duplicate.status,
+        title: duplicate.title || title,
+        viaVideo: false,
+        updated: false,
+        duplicate: true,
+      };
+    }
+  }
+
   const row = {
-    source_url: url,
+    source_url: sourceUrl,
     platform,
     author,
     title,
@@ -609,9 +672,27 @@ export async function saveFromImage(
       ? "needs_review"
       : "ok";
 
+  const duplicate = await findDuplicateRecipe(sb, {
+    source_url: captionUrl ? canonicalizeRecipeUrl(captionUrl) : null,
+    title,
+    ingredients,
+    steps,
+  });
+  if (duplicate) {
+    await removeRecipeImage(sb, id);
+    return {
+      id: duplicate.id,
+      status: duplicate.status,
+      title: duplicate.title || title,
+      viaVideo: false,
+      updated: false,
+      duplicate: true,
+    };
+  }
+
   const { error } = await sb.from("recipes").insert({
     id,
-    source_url: captionUrl || "photo-upload",
+    source_url: captionUrl ? canonicalizeRecipeUrl(captionUrl) : "photo-upload",
     platform: captionUrl ? detectPlatform(captionUrl) : "photo",
     author: null,
     title,
@@ -654,7 +735,9 @@ export async function processPhoto(opts: {
   }
   const base = (process.env.APP_BASE_URL || "").replace(/\/$/, "");
   const link = base ? `\n${base}/recipe/${r.id}` : "";
-  if (r.status === "ok") {
+  if (r.duplicate) {
+    await sendMessage(opts.chatId, `ℹ️ هذه الوصفة محفوظة عندك مسبقًا: <b>${escapeHtml(r.title)}</b>${link}`);
+  } else if (r.status === "ok") {
     await sendMessage(opts.chatId, `✅ استخرجت الوصفة من الصورة: <b>${escapeHtml(r.title)}</b>${link}`);
   } else {
     await sendMessage(
@@ -719,9 +802,26 @@ export async function processVideo(opts: {
       ? "needs_review"
       : "ok";
 
+  const duplicate = await findDuplicateRecipe(sb, {
+    source_url: captionUrl ? canonicalizeRecipeUrl(captionUrl) : null,
+    title,
+    ingredients,
+    steps,
+  });
+  if (duplicate) {
+    await removeRecipeImage(sb, id);
+    const base = (process.env.APP_BASE_URL || "").replace(/\/$/, "");
+    const link = base ? `\n${base}/recipe/${duplicate.id}` : "";
+    await sendMessage(
+      opts.chatId,
+      `ℹ️ هذه الوصفة محفوظة عندك مسبقًا: <b>${escapeHtml(duplicate.title || title)}</b>${link}`
+    );
+    return;
+  }
+
   const { error } = await sb.from("recipes").insert({
     id,
-    source_url: captionUrl || "video-upload",
+    source_url: captionUrl ? canonicalizeRecipeUrl(captionUrl) : "video-upload",
     platform: captionUrl ? detectPlatform(captionUrl) : "video",
     author: null,
     title,

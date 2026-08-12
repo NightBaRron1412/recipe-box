@@ -8,7 +8,7 @@ import type { Nutrition, Recipe } from "@/lib/types";
 import { getEditKey, hasEditKey, addToShopping } from "@/lib/client";
 import { CartLink } from "@/app/CartLink";
 import { HeaderMenu } from "@/app/HeaderMenu";
-import { scaleIngredient, SCALE_OPTIONS } from "@/lib/scale";
+import { scaleIngredient, scaleInstruction, SCALE_OPTIONS } from "@/lib/scale";
 import { Icon } from "@/app/Icon";
 import { toast } from "@/app/Toast";
 
@@ -445,7 +445,7 @@ export default function RecipeView({
               <h2><Icon name="hat" size={18} /> طريقة التحضير</h2>
               <ol className="steps">
                 {steps.map((s, i) => (
-                  <li key={i}>{s}</li>
+                  <li key={i}>{scaleInstruction(s, scale)}</li>
                 ))}
               </ol>
             </div>
