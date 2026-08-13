@@ -10,6 +10,7 @@ import { HeaderMenu } from "./HeaderMenu";
 import { Icon } from "./Icon";
 import { getEditKey, hasEditKey } from "@/lib/client";
 import { arabicNormalize } from "@/lib/arabic";
+import { isDuplicateRecipe } from "@/lib/dedupe";
 import { toast } from "./Toast";
 
 const PLATFORM_LABEL: Record<string, string> = {
@@ -19,8 +20,6 @@ const PLATFORM_LABEL: Record<string, string> = {
 
 type Sort = "newest" | "oldest" | "fastest" | "az";
 const PAGE_SIZE = 24;
-
-const norm = (s?: string | null) => (s || "").trim().toLowerCase();
 
 export default function GalleryClient({
   recipes,
@@ -120,14 +119,18 @@ export default function GalleryClient({
     [recipes]
   );
 
-  // Titles that appear on more than one recipe -> flag as possible duplicates.
-  const dupTitles = useMemo(() => {
-    const c = new Map<string, number>();
-    for (const r of recipes) {
-      const k = norm(r.title);
-      if (k) c.set(k, (c.get(k) || 0) + 1);
+  // Match the save-time check, including its same-chef requirement.
+  const duplicateRecipeIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (let i = 0; i < recipes.length; i++) {
+      for (let j = i + 1; j < recipes.length; j++) {
+        if (isDuplicateRecipe(recipes[i], recipes[j])) {
+          ids.add(recipes[i].id);
+          ids.add(recipes[j].id);
+        }
+      }
     }
-    return new Set([...c].filter(([, n]) => n > 1).map(([k]) => k));
+    return ids;
   }, [recipes]);
 
   const filtered = useMemo(() => {
@@ -405,7 +408,7 @@ export default function GalleryClient({
                       <div className="badges-top">
                         {r.status === "needs_review" && <span className="review-badge">بحاجة لمراجعة</span>}
                         {r.cooked && <span className="cooked-badge"><Icon name="check" size={12} /> طبختها</span>}
-                        {dupTitles.has(norm(r.title)) && <span className="dup-badge">مكرر؟</span>}
+                        {duplicateRecipeIds.has(r.id) && <span className="dup-badge">مكرر؟</span>}
                       </div>
                       {r.favorite && <span className="fav-badge"><Icon name="heartFilled" size={16} /></span>}
                     </div>

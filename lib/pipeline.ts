@@ -439,7 +439,7 @@ async function findDuplicateRecipe(
 ): Promise<StoredRecipeIdentity | null> {
   const { data, error } = await sb
     .from("recipes")
-    .select("id,status,source_url,title,ingredients,steps")
+    .select("id,status,source_url,author,title,ingredients,steps")
     .eq("status", "ok")
     .limit(1000);
   if (error) {
@@ -571,6 +571,7 @@ export async function saveFromUrl(url: string): Promise<SaveResult> {
   if (!existing) {
     const duplicate = await findDuplicateRecipe(sb, {
       source_url: sourceUrl,
+      author,
       title,
       ingredients,
       steps,
@@ -674,6 +675,7 @@ export async function saveFromImage(
 
   const duplicate = await findDuplicateRecipe(sb, {
     source_url: captionUrl ? canonicalizeRecipeUrl(captionUrl) : null,
+    author: null,
     title,
     ingredients,
     steps,
@@ -804,6 +806,7 @@ export async function processVideo(opts: {
 
   const duplicate = await findDuplicateRecipe(sb, {
     source_url: captionUrl ? canonicalizeRecipeUrl(captionUrl) : null,
+    author: null,
     title,
     ingredients,
     steps,

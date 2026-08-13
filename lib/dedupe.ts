@@ -2,6 +2,7 @@ import { arabicNormalize } from "./arabic";
 
 export interface RecipeIdentity {
   source_url?: string | null;
+  author?: string | null;
   title?: string | null;
   ingredients?: string[] | null;
   steps?: string[] | null;
@@ -36,6 +37,33 @@ function textKey(value?: string | null): string {
     .trim();
 }
 
+/** Chef names are often stored in both Arabic and English, sometimes in the
+ * opposite order. Sorting normalized words keeps those forms equivalent. */
+function chefKey(value?: string | null): string {
+  return textKey(value)
+    .split(" ")
+    .filter(Boolean)
+    .sort((a, b) => a.localeCompare(b, "ar"))
+    .join(" ");
+}
+
+function sameChef(a?: string | null, b?: string | null): boolean {
+  const aKey = chefKey(a);
+  const bKey = chefKey(b);
+  return Boolean(aKey && bKey && aKey === bKey);
+}
+
+const TITLE_STOPWORDS = new Set(["في", "من", "مع", "على", "الي", "و"]);
+
+function titleTokenSet(value?: string | null): Set<string> {
+  return new Set(
+    textKey(value)
+      .split(" ")
+      .map((token) => /^(?:بال|وال).{3,}$/u.test(token) ? token.slice(1) : token)
+      .filter((token) => token && !TITLE_STOPWORDS.has(token))
+  );
+}
+
 function ingredientKey(value: string): string {
   return textKey(value)
     .split(" ")
@@ -51,6 +79,16 @@ function lineSet(lines?: string[] | null, ingredient = false): Set<string> {
   );
 }
 
+function ingredientTokenSet(lines?: string[] | null): Set<string> {
+  const tokens = new Set<string>();
+  for (const line of lines || []) {
+    for (const token of ingredientKey(line).split(" ")) {
+      if (token && token.length >= 2 && !TITLE_STOPWORDS.has(token)) tokens.add(token);
+    }
+  }
+  return tokens;
+}
+
 function sufficientlySimilar(a: Set<string>, b: Set<string>): boolean {
   const smaller = Math.min(a.size, b.size);
   if (smaller < 2) return false;
@@ -59,6 +97,29 @@ function sufficientlySimilar(a: Set<string>, b: Set<string>): boolean {
   const coverage = intersection / smaller;
   const union = a.size + b.size - intersection;
   return coverage >= 0.75 && intersection / union >= 0.5;
+}
+
+function sufficientlySimilarIngredients(a?: string[] | null, b?: string[] | null): boolean {
+  if (sufficientlySimilar(lineSet(a, true), lineSet(b, true))) return true;
+  const aTokens = ingredientTokenSet(a);
+  const bTokens = ingredientTokenSet(b);
+  const smaller = Math.min(aTokens.size, bTokens.size);
+  if (smaller < 5) return false;
+  let intersection = 0;
+  for (const token of aTokens) if (bTokens.has(token)) intersection++;
+  const union = aTokens.size + bTokens.size - intersection;
+  return intersection / smaller >= 0.8 && intersection / union >= 0.55;
+}
+
+function similarTitles(a?: string | null, b?: string | null): boolean {
+  const aTokens = titleTokenSet(a);
+  const bTokens = titleTokenSet(b);
+  const smaller = Math.min(aTokens.size, bTokens.size);
+  if (smaller < 2) return false;
+  let intersection = 0;
+  for (const token of aTokens) if (bTokens.has(token)) intersection++;
+  const union = aTokens.size + bTokens.size - intersection;
+  return intersection / smaller >= 0.75 && intersection / union >= 0.6;
 }
 
 /**
@@ -105,21 +166,23 @@ export function canonicalizeRecipeUrl(input: string): string {
   }
 }
 
-/** Conservative content check: the normalized title and most ingredient lines
- * must agree. This rejects true reposts without blocking distinct recipes that
- * happen to share a generic title such as "cake" or "soup". */
+/** Exact canonical sources are duplicates. Across different sources, a match
+ * is only allowed for the same known chef. An exact distinctive title is
+ * enough; reordered/near-identical titles must also have matching content. */
 export function isDuplicateRecipe(a: RecipeIdentity, b: RecipeIdentity): boolean {
   if (a.source_url && b.source_url && /^https?:/i.test(a.source_url) && /^https?:/i.test(b.source_url)) {
     if (canonicalizeRecipeUrl(a.source_url) === canonicalizeRecipeUrl(b.source_url)) return true;
   }
 
+  if (!sameChef(a.author, b.author)) return false;
+
   const aTitle = textKey(a.title);
   const bTitle = textKey(b.title);
-  if (!aTitle || aTitle !== bTitle || GENERIC_TITLES.has(aTitle)) return false;
+  if (!aTitle || !bTitle || GENERIC_TITLES.has(aTitle) || GENERIC_TITLES.has(bTitle)) return false;
+  if (aTitle === bTitle) return true;
+  if (!similarTitles(a.title, b.title)) return false;
 
-  const aIngredients = lineSet(a.ingredients, true);
-  const bIngredients = lineSet(b.ingredients, true);
-  if (sufficientlySimilar(aIngredients, bIngredients)) return true;
+  if (sufficientlySimilarIngredients(a.ingredients, b.ingredients)) return true;
 
   // Recipes extracted from spoken videos occasionally omit ingredients but
   // reproduce the same preparation steps nearly verbatim.
