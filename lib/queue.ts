@@ -12,7 +12,9 @@ export interface Job {
   attempts: number;
 }
 
-const LEASE_MS = 90_000;
+// Longer than the slowest single job (~2min for a long reel), so the lease never
+// expires mid-job and lets a second worker in.
+const LEASE_MS = 180_000;
 
 export async function enqueueJob(url: string, chatId: number | null): Promise<void> {
   await supabaseAdmin().from("jobs").insert({ url, chat_id: chatId });

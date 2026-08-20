@@ -150,8 +150,22 @@ async function maybeAlertIgCookies(): Promise<void> {
   }
 }
 
-/** Ask the resolver microservice to turn a page URL into direct media URLs. */
-export async function resolveVideoUrl(pageUrl: string): Promise<Resolved | null> {
+/**
+ * Ask the resolver microservice to turn a page URL into direct media URLs.
+ * yt-dlp fails to parse Facebook pages maybe a third of the time (FB serves
+ * varying markup), and it fails fast — so just try again before giving up.
+ */
+export async function resolveVideoUrl(pageUrl: string, tries = 3): Promise<Resolved | null> {
+  for (let i = 0; i < tries; i++) {
+    const r = await resolveOnce(pageUrl);
+    if (r) return r;
+    if (i < tries - 1) await new Promise((res) => setTimeout(res, 1500));
+  }
+  if (/instagram\.com/i.test(pageUrl)) await maybeAlertIgCookies();
+  return null;
+}
+
+async function resolveOnce(pageUrl: string): Promise<Resolved | null> {
   const endpoint = process.env.RESOLVER_URL;
   if (!endpoint) return null;
   try {
@@ -164,15 +178,10 @@ export async function resolveVideoUrl(pageUrl: string): Promise<Resolved | null>
       body: JSON.stringify({ url: pageUrl }),
     }, 25_000);
     const j = await res.json().catch(() => null);
-    if (!res.ok) {
+    if (!res.ok || (!j?.video_url && !j?.audio_url)) {
+      // IG failing to resolve almost always means the cookies expired — the
+      // caller alerts once all retries are spent.
       if (j?.error) console.error("resolver error", j.error);
-      if (/instagram\.com/i.test(pageUrl)) await maybeAlertIgCookies();
-      return null;
-    }
-    if (!j?.video_url && !j?.audio_url) {
-      if (j?.error) console.error("resolver error", j.error);
-      // IG failing to resolve almost always means the cookies expired.
-      if (/instagram\.com/i.test(pageUrl)) await maybeAlertIgCookies();
       return null;
     }
     return j;

@@ -120,7 +120,9 @@ async function callGemini(
           responseSchema: RESPONSE_SCHEMA,
         },
       }),
-    }, 60_000);
+      // Transcribing a 3-minute reel routinely runs past a minute; a stingy
+      // timeout just throws away the upload and the quota spent on it.
+    }, 150_000);
     // 429 (per-minute limit) or 503 (model overloaded): wait and retry, and on
     // the 2nd try drop to flash-lite if we aren't already on it.
     if ((res.status === 429 || res.status === 503) && attempt < 2) {
